@@ -244,6 +244,26 @@ export const adminAPI = {
     }
   },
 
+  // Send or resend invoice email
+  sendInvoiceEmail: async (id) => {
+    try {
+      const response = await api.post(`/admin/applications/${id}/send-invoice`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  // Send diagnostic test email
+  sendTestEmail: async (email) => {
+    try {
+      const response = await api.post('/admin/send-test-email', { email });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Payments
   getAllPayments: async () => {
     try {

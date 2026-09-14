@@ -1,5 +1,6 @@
 const { VisaConfiguration, Application, Document, sequelize } = require('../models');
 const uploadService = require('../services/uploadService');
+const emailService = require('../services/emailService');
 const Razorpay = require('razorpay');
 
 // Initialize Razorpay
@@ -468,6 +469,27 @@ const createApplication = async (req, res) => {
       }
     }
 
+    // Trigger application confirmation and admin alert asynchronously
+    try {
+      Application.findByPk(newApplication.id, {
+        include: [{ model: VisaConfiguration, as: 'visaConfiguration' }]
+      }).then(fullApp => {
+        const targetApp = fullApp || newApplication;
+        if (parsedUserData.email) {
+          emailService.sendApplicationConfirmationEmail({
+            application: targetApp,
+            documents: uploadedDocuments
+          }).catch(err => console.error('[createApplication] Confirmation email error:', err.message));
+        }
+        emailService.sendAdminNewApplicationAlert({
+          application: targetApp,
+          documents: uploadedDocuments
+        }).catch(err => console.error('[createApplication] Admin alert error:', err.message));
+      }).catch(err => console.error('[createApplication] Email fetch error:', err.message));
+    } catch (emailErr) {
+      console.error('[createApplication] Email dispatch error:', emailErr.message);
+    }
+
     return res.status(201).json({
       message: 'Application created successfully',
       applicationId: newApplication.id,
@@ -614,6 +636,26 @@ const verifyPayment = async (req, res) => {
       application.order_id = razorpay_order_id;
       application.status = 'Payment Received';
       await application.save();
+
+      // Dispatch Invoice and Admin Payment Alert asynchronously
+      try {
+        Application.findByPk(application.id, {
+          include: [{ model: VisaConfiguration, as: 'visaConfiguration' }]
+        }).then(fullApp => {
+          const targetApp = fullApp || application;
+          emailService.sendInvoiceEmail({
+            application: targetApp,
+            paymentDetails: { paymentId: razorpay_payment_id, orderId: razorpay_order_id }
+          }).catch(err => console.error('[verifyPayment] Invoice email error:', err.message));
+
+          emailService.sendAdminPaymentAlert({
+            application: targetApp,
+            paymentDetails: { paymentId: razorpay_payment_id, orderId: razorpay_order_id }
+          }).catch(err => console.error('[verifyPayment] Admin payment alert error:', err.message));
+        }).catch(err => console.error('[verifyPayment] Email fetch error:', err.message));
+      } catch (emailErr) {
+        console.error('[verifyPayment] Email dispatch error:', emailErr.message);
+      }
 
       return res.status(200).json({
         message: 'Payment verified successfully',
@@ -769,6 +811,27 @@ const uploadApplicationDocuments = async (req, res) => {
     application.status = 'Payment Pending';
     await application.save();
 
+    // Trigger confirmation and admin alert
+    try {
+      Application.findByPk(application.id, {
+        include: [{ model: VisaConfiguration, as: 'visaConfiguration' }]
+      }).then(fullApp => {
+        const targetApp = fullApp || application;
+        if (targetApp.user_data?.email) {
+          emailService.sendApplicationConfirmationEmail({
+            application: targetApp,
+            documents: uploadedDocuments
+          }).catch(err => console.error('[uploadDocs] Confirmation email error:', err.message));
+        }
+        emailService.sendAdminNewApplicationAlert({
+          application: targetApp,
+          documents: uploadedDocuments
+        }).catch(err => console.error('[uploadDocs] Admin alert error:', err.message));
+      }).catch(err => console.error('[uploadDocs] Email fetch error:', err.message));
+    } catch (emailErr) {
+      console.error('[uploadDocs] Email dispatch error:', emailErr.message);
+    }
+
     return res.status(200).json({
       message: 'Documents uploaded successfully',
       applicationId: application.id,
@@ -883,6 +946,18 @@ const submitQuery = async (req, res) => {
       payment_status: 'pending',
       status: source === 'Contact Page' || queryType === 'Contact Inquiry' ? 'Contact Inquiry' : 'Query Received'
     });
+
+    // Send acknowledgment to applicant and alert to admin
+    try {
+      if (contactEmail) {
+        emailService.sendQueryAcknowledgmentEmail({ queryData: userData })
+          .catch(err => console.error('[submitQuery] Acknowledgment email error:', err.message));
+      }
+      emailService.sendAdminQueryAlert({ queryData: userData })
+        .catch(err => console.error('[submitQuery] Admin query alert error:', err.message));
+    } catch (emailErr) {
+      console.error('[submitQuery] Email dispatch error:', emailErr.message);
+    }
 
     return res.status(201).json({
       success: true,

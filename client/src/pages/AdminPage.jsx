@@ -53,6 +53,40 @@ const AdminPage = () => {
   const [appPage, setAppPage] = useState(0);
   const [notification, setNotification] = useState(null);
 
+  // Email action states
+  const [sendingInvoice, setSendingInvoice] = useState(false);
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailAddress, setTestEmailAddress] = useState('');
+
+  // Handle send / resend invoice email
+  const handleSendInvoice = async (appId) => {
+    try {
+      setSendingInvoice(true);
+      const res = await adminAPI.sendInvoiceEmail(appId);
+      showNotification(res.message || 'Invoice and receipt email dispatched successfully!');
+    } catch (err) {
+      console.error('Error sending invoice:', err);
+      showNotification(err.message || 'Failed to send invoice email', 'error');
+    } finally {
+      setSendingInvoice(false);
+    }
+  };
+
+  // Handle sending test email
+  const handleTestEmail = async (e) => {
+    if (e) e.preventDefault();
+    try {
+      setTestingEmail(true);
+      const res = await adminAPI.sendTestEmail(testEmailAddress);
+      showNotification(res.message || 'Test email dispatched successfully!');
+    } catch (err) {
+      console.error('Error sending test email:', err);
+      showNotification(err.message || 'Failed to send test email', 'error');
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
   // Settings tab states
   const [settingsUsername, setSettingsUsername] = useState(localStorage.getItem('adminUsername') || '');
   const [settingsPassword, setSettingsPassword] = useState('');
@@ -728,6 +762,7 @@ const AdminPage = () => {
                   <th className="p-4 font-bold">Amount</th>
                   <th className="p-4 font-bold">Gateway Method</th>
                   <th className="p-4 font-bold">Settled Date</th>
+                  <th className="p-4 font-bold text-right">Invoice</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-container-low text-xs sm:text-sm">
@@ -746,11 +781,25 @@ const AdminPage = () => {
                       </span>
                     </td>
                     <td className="p-4 text-outline text-xs">{formatDate(payment.date)}</td>
+                    <td className="p-4 text-right">
+                      <button
+                        type="button"
+                        disabled={sendingInvoice}
+                        onClick={() => handleSendInvoice(payment.application_id)}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-container-high hover:bg-emerald-600 hover:text-white text-on-surface text-xs font-semibold transition-all border border-outline-variant/30 cursor-pointer disabled:opacity-50"
+                        title="Send / Resend Tax Invoice & Receipt Email"
+                      >
+                        <span className="material-symbols-outlined text-sm">
+                          {sendingInvoice ? 'sync' : 'receipt_long'}
+                        </span>
+                        <span>{sendingInvoice ? 'Sending...' : 'Invoice'}</span>
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {payments.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="p-12 text-center text-outline">
+                    <td colSpan="7" className="p-12 text-center text-outline">
                       No payment records found.
                     </td>
                   </tr>
@@ -931,6 +980,66 @@ const AdminPage = () => {
             </button>
           </div>
         </form>
+
+        {/* Email & SMTP Diagnostics Card */}
+        <div className="bg-surface-container-lowest p-6 rounded-2xl border border-outline-variant/30 shadow-xs space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+              <span className="material-symbols-outlined">outgoing_mail</span>
+            </div>
+            <div>
+              <h3 className="font-headline font-bold text-base text-on-surface">Email Delivery System</h3>
+              <p className="text-xs text-outline">Powered by ZeptoMail SMTP (smtp.zeptomail.in)</p>
+            </div>
+          </div>
+
+          <div className="p-4 bg-surface-container-low rounded-xl border border-outline-variant/30 space-y-2 text-xs">
+            <div className="flex justify-between">
+              <span className="text-outline">Admin Alert Recipient:</span>
+              <span className="font-mono font-bold text-primary">support@zoltanvisa.com</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-outline">Reply-To Address:</span>
+              <span className="font-mono font-bold text-primary">support@zoltanvisa.com</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-outline">SMTP Server:</span>
+              <span className="font-mono text-outline">smtp.zeptomail.in:587</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-outline">Automatic Triggers:</span>
+              <span className="text-emerald-600 font-bold">Invoices &middot; Leads &middot; Dossiers &middot; Status Changes</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleTestEmail} className="space-y-3">
+            <label className="block text-xs font-bold text-outline uppercase tracking-wider">
+              Send Diagnostic Test Email
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                placeholder="Enter recipient (e.g. support@zoltanvisa.com)"
+                value={testEmailAddress}
+                onChange={(e) => setTestEmailAddress(e.target.value)}
+                className="flex-1 px-3.5 py-2 bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:ring-2 focus:ring-primary/20 text-xs text-on-surface"
+              />
+              <button
+                type="submit"
+                disabled={testingEmail}
+                className="px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <span className="material-symbols-outlined text-sm">
+                  {testingEmail ? 'sync' : 'send'}
+                </span>
+                {testingEmail ? 'Sending...' : 'Send Test'}
+              </button>
+            </div>
+            <p className="text-[11px] text-outline">
+              Leave blank to default to the configured admin email (support@zoltanvisa.com).
+            </p>
+          </form>
+        </div>
       </div>
     );
   };
@@ -1148,6 +1257,25 @@ const AdminPage = () => {
                       <span className="font-mono text-xs">{selectedApplication.payment_id}</span>
                     </div>
                   )}
+
+                  {/* Resend Invoice Action */}
+                  <div className="col-span-2 pt-2.5 border-t border-outline-variant/20 flex items-center justify-between flex-wrap gap-2">
+                    <span className="text-[11px] text-outline flex items-center gap-1">
+                      <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                      Tax Invoice & Receipt
+                    </span>
+                    <button
+                      type="button"
+                      disabled={sendingInvoice}
+                      onClick={() => handleSendInvoice(selectedApplication.id)}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs disabled:opacity-50 cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-sm">
+                        {sendingInvoice ? 'sync' : 'receipt_long'}
+                      </span>
+                      {sendingInvoice ? 'Sending...' : 'Send / Resend Invoice Email'}
+                    </button>
+                  </div>
                 </div>
               </div>
 

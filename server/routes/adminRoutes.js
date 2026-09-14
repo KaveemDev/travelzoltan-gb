@@ -32,6 +32,10 @@ router.get('/applications', adminController.getAllApplications);
 router.get('/applications/:id', adminController.getApplicationById);
 router.get('/applications/:id/agreement', adminController.getApplicationAgreement);
 router.put('/applications/:id/status', adminController.updateApplicationStatus);
+router.post('/applications/:id/send-invoice', adminController.sendApplicationInvoice);
+
+// Email diagnostics
+router.post('/send-test-email', adminController.testEmailConfig);
 
 // Payments
 router.get('/payments', adminController.getAllPayments);

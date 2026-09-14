@@ -1,5 +1,6 @@
 const { VisaConfiguration, Application, Document, sequelize } = require('../models');
 const { Op } = require('sequelize');
+const emailService = require('../services/emailService');
 
 // Helper function to calculate total fee from breakdown
 const calculateTotalFee = (serviceFee) => {
@@ -214,6 +215,24 @@ const updateApplicationStatus = async (req, res) => {
     }
 
     await application.save();
+
+    // Trigger status update email to applicant asynchronously
+    try {
+      Application.findByPk(application.id, {
+        include: [{ model: VisaConfiguration, as: 'visaConfiguration' }]
+      }).then(fullApp => {
+        const targetApp = fullApp || application;
+        if (targetApp.user_data?.email) {
+          emailService.sendStatusUpdateEmail({
+            application: targetApp,
+            newStatus: status,
+            notes: notes || ''
+          }).catch(err => console.error('[updateApplicationStatus] Status update email error:', err.message));
+        }
+      }).catch(err => console.error('[updateApplicationStatus] Email fetch error:', err.message));
+    } catch (emailErr) {
+      console.error('[updateApplicationStatus] Email dispatch error:', emailErr.message);
+    }
 
     return res.status(200).json({
       message: 'Application status updated successfully',
@@ -535,6 +554,69 @@ const getApplicationAgreement = async (req, res) => {
   }
 };
 
+// POST /api/admin/applications/:id/send-invoice
+const sendApplicationInvoice = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const application = await Application.findByPk(id, {
+      include: [{ model: VisaConfiguration, as: 'visaConfiguration' }]
+    });
+
+    if (!application) {
+      return res.status(404).json({ message: 'Application not found' });
+    }
+
+    if (!application.user_data?.email) {
+      return res.status(400).json({ message: 'No email address registered for this applicant.' });
+    }
+
+    const result = await emailService.sendInvoiceEmail({
+      application,
+      paymentDetails: { paymentId: application.payment_id, orderId: application.order_id }
+    });
+
+    if (result.success) {
+      return res.status(200).json({
+        message: 'Invoice & receipt email sent successfully',
+        messageId: result.messageId,
+        simulated: result.simulated
+      });
+    } else {
+      return res.status(500).json({
+        message: 'Failed to send invoice email',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error sending application invoice:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+
+// POST /api/admin/send-test-email
+const testEmailConfig = async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await emailService.sendTestEmail(email);
+
+    if (result.success) {
+      return res.status(200).json({
+        message: `Test email dispatched successfully to ${email || process.env.ADMIN_EMAIL || 'support@zoltanvisa.com'}`,
+        messageId: result.messageId,
+        simulated: result.simulated
+      });
+    } else {
+      return res.status(500).json({
+        message: 'Failed to send test email',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error in testEmailConfig:', error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getAllApplications,
@@ -548,5 +630,7 @@ module.exports = {
   updateConfiguration,
   reorderConfigurations,
   deleteConfiguration,
-  getApplicationAgreement
+  getApplicationAgreement,
+  sendApplicationInvoice,
+  testEmailConfig
 };
