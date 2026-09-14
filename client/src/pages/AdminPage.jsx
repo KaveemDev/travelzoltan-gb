@@ -4,7 +4,14 @@ import { adminAPI, authAPI } from '../services/api';
 import DocumentViewer from '../components/DocumentViewer';
 import LiveApprovalsTab from '../components/LiveApprovalsTab';
 import TravelVisaAgreementModal from '../components/TravelVisaAgreementModal';
-import { DEFAULT_PAY_NOW_POINTS, DEFAULT_PAY_IN_FULL_POINTS, getPayNowPoints, getPayInFullPoints } from '../utils/paymentUtils';
+import { 
+  DEFAULT_PAY_NOW_POINTS, 
+  DEFAULT_PAY_IN_FULL_POINTS, 
+  DEFAULT_WHATS_INCLUDED_POINTS,
+  getPayNowPoints, 
+  getPayInFullPoints,
+  getWhatsIncludedPoints 
+} from '../utils/paymentUtils';
 
 // Format currency helper
 const formatCurrency = (amount) => {
@@ -29,7 +36,8 @@ const normalizeFeeData = (feeData) => {
       pay_now_amount: total,
       pay_in_full_amount: 0,
       pay_now_points: [...DEFAULT_PAY_NOW_POINTS],
-      pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS]
+      pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS],
+      whats_included: [...DEFAULT_WHATS_INCLUDED_POINTS]
     };
   }
   if (!feeData || typeof feeData !== 'object') {
@@ -38,7 +46,8 @@ const normalizeFeeData = (feeData) => {
       pay_now_amount: 0,
       pay_in_full_amount: 0,
       pay_now_points: [...DEFAULT_PAY_NOW_POINTS],
-      pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS]
+      pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS],
+      whats_included: [...DEFAULT_WHATS_INCLUDED_POINTS]
     };
   }
 
@@ -59,7 +68,8 @@ const normalizeFeeData = (feeData) => {
     pay_now_amount: payNow,
     pay_in_full_amount: payInFull,
     pay_now_points: getPayNowPoints(feeData),
-    pay_in_full_points: getPayInFullPoints(feeData)
+    pay_in_full_points: getPayInFullPoints(feeData),
+    whats_included: getWhatsIncludedPoints(feeData)
   };
 };
 
@@ -298,11 +308,28 @@ const ConfigurationsTab = ({ showNotification }) => {
 
   const handleSaveConfig = async () => {
     try {
+      const cleanedFee = {
+        ...configForm.service_fee,
+        pay_now_points: Array.isArray(configForm.service_fee?.pay_now_points)
+          ? configForm.service_fee.pay_now_points.map(p => p.trim()).filter(Boolean)
+          : [],
+        pay_in_full_points: Array.isArray(configForm.service_fee?.pay_in_full_points)
+          ? configForm.service_fee.pay_in_full_points.map(p => p.trim()).filter(Boolean)
+          : [],
+        whats_included: Array.isArray(configForm.service_fee?.whats_included)
+          ? configForm.service_fee.whats_included.map(p => p.trim()).filter(Boolean)
+          : []
+      };
+      const payload = {
+        ...configForm,
+        service_fee: cleanedFee
+      };
+
       if (editingConfig) {
-        await adminAPI.updateConfiguration(editingConfig.id, configForm);
+        await adminAPI.updateConfiguration(editingConfig.id, payload);
         showNotification('Configuration updated successfully');
       } else {
-        await adminAPI.createConfiguration(configForm);
+        await adminAPI.createConfiguration(payload);
         showNotification('Configuration created successfully');
       }
       setShowConfigModal(false);
@@ -409,7 +436,8 @@ const ConfigurationsTab = ({ showNotification }) => {
         pay_now_amount: 0,
         pay_in_full_amount: 0,
         pay_now_points: [...DEFAULT_PAY_NOW_POINTS],
-        pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS]
+        pay_in_full_points: [...DEFAULT_PAY_IN_FULL_POINTS],
+        whats_included: [...DEFAULT_WHATS_INCLUDED_POINTS]
       },
       required_documents: JSON.parse(JSON.stringify(defaultRequiredDocs)),
       form_schema: normalizeFormSchema(null)
@@ -691,6 +719,32 @@ const ConfigurationsTab = ({ showNotification }) => {
                         Leave empty to use default points.
                       </span>
                     </div>
+                  </div>
+
+                  {/* What's Included in Your Service */}
+                  <div className="pt-2 border-t border-outline-variant/40">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-xs font-bold text-on-surface">
+                        What's Included in Your Service (one per line)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => updateFeeBreakdown('whats_included', [...DEFAULT_WHATS_INCLUDED_POINTS])}
+                        className="text-[11px] text-primary hover:underline font-medium cursor-pointer"
+                      >
+                        Reset to Defaults
+                      </button>
+                    </div>
+                    <textarea
+                      rows={6}
+                      value={Array.isArray(configForm.service_fee.whats_included) ? configForm.service_fee.whats_included.join('\n') : ''}
+                      onChange={(e) => updateFeeBreakdown('whats_included', e.target.value.split('\n'))}
+                      className="w-full px-3 py-2 bg-surface-container-high rounded-lg border-none focus:ring-2 focus:ring-primary/40 text-xs font-mono leading-relaxed"
+                      placeholder={DEFAULT_WHATS_INCLUDED_POINTS.join('\n')}
+                    />
+                    <span className="text-[11px] text-outline block mt-0.5">
+                      These bullet points appear under "What's Included in Your Service" on the applicant checklist page. If left blank, default services will be displayed.
+                    </span>
                   </div>
 
                   <div className="pt-2 border-t border-outline-variant flex justify-between items-center">

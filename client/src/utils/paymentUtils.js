@@ -11,6 +11,15 @@ export const DEFAULT_PAY_IN_FULL_POINTS = [
   "Premium concierge service included"
 ];
 
+export const DEFAULT_WHATS_INCLUDED_POINTS = [
+  "1-on-1 Dedicated Senior Visa Case Officer",
+  "Official Embassy Dossier Audit & Error-Check",
+  "Priority Consulate / Biometrics Appointment Booking",
+  "Confirmed Flight & Hotel Reservation Vouchers",
+  "Consulate-Approved Travel Medical Insurance",
+  "100% Pre-Check Money-Back Approval Guarantee"
+];
+
 /**
  * Replaces placeholders like £{amount} or {amount} or {symbol} in point text
  */
@@ -57,3 +66,22 @@ export const getPayInFullPoints = (serviceFee) => {
   }
   return DEFAULT_PAY_IN_FULL_POINTS;
 };
+
+/**
+ * Returns array of "What's Included in Your Service" points (with fallback to default)
+ */
+export const getWhatsIncludedPoints = (source) => {
+  if (Array.isArray(source) && source.length > 0) {
+    const filtered = source.filter(p => typeof p === 'string' && p.trim().length > 0);
+    if (filtered.length > 0) return filtered;
+  }
+  if (source && typeof source === 'object') {
+    const candidate = source.whats_included || source.service_fee?.whats_included || source.form_schema?.whats_included;
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      const filtered = candidate.filter(p => typeof p === 'string' && p.trim().length > 0);
+      if (filtered.length > 0) return filtered;
+    }
+  }
+  return DEFAULT_WHATS_INCLUDED_POINTS;
+};
+

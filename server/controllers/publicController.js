@@ -293,11 +293,21 @@ const normalizeRequiredDocs = (docs) => {
   return normalized;
 };
 
+const DEFAULT_WHATS_INCLUDED = [
+  "1-on-1 Dedicated Senior Visa Case Officer",
+  "Official Embassy Dossier Audit & Error-Check",
+  "Priority Consulate / Biometrics Appointment Booking",
+  "Confirmed Flight & Hotel Reservation Vouchers",
+  "Consulate-Approved Travel Medical Insurance",
+  "100% Pre-Check Money-Back Approval Guarantee"
+];
+
 const DEFAULT_VISA_REQUIREMENTS = {
   service_fee: {
     admin_fee: 30,
     express_fee: 30,
-    service_fee: 90
+    service_fee: 90,
+    whats_included: DEFAULT_WHATS_INCLUDED
   },
   required_documents: defaultRequiredDocs,
   form_schema: {},
