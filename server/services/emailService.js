@@ -1,6 +1,35 @@
 const nodemailer = require('nodemailer');
+const https = require('https');
 
-// Helper to create transporter using current env variables
+// Helper to parse address strings like '"Zoltan Visa" <noreply@gb.zoltanvisa.com>' or 'noreply@gb.zoltanvisa.com'
+const parseAddressString = (str, defaultAddress = 'noreply@gb.zoltanvisa.com', defaultName = 'Zoltan Visa') => {
+  if (!str) return { address: defaultAddress, name: defaultName };
+  const match = str.match(/^(?:"?([^"]*)"?\s)?(?:<?(.+@[^>]+)>?)$/);
+  if (match) {
+    const name = match[1]?.trim() || defaultName;
+    const address = match[2]?.trim() || defaultAddress;
+    return { address, name };
+  }
+  if (str.includes('@')) {
+    return { address: str.trim(), name: defaultName };
+  }
+  return { address: defaultAddress, name: defaultName };
+};
+
+// Helper to normalize recipient list for ZeptoMail API
+const parseRecipients = (toInput) => {
+  if (Array.isArray(toInput)) {
+    return toInput.map(item => (typeof item === 'string' ? { email_address: parseAddressString(item) } : item));
+  }
+  if (typeof toInput === 'string') {
+    return toInput.split(',').map(s => s.trim()).filter(Boolean).map(s => ({
+      email_address: parseAddressString(s, s, s.split('@')[0])
+    }));
+  }
+  return [];
+};
+
+// Helper to create transporter using current env variables with strict timeouts
 const getTransporter = () => {
   const host = process.env.SMTP_HOST || 'smtp.zeptomail.in';
   const port = parseInt(process.env.SMTP_PORT || '587', 10);
@@ -15,6 +44,9 @@ const getTransporter = () => {
       user,
       pass
     },
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
     tls: {
       rejectUnauthorized: false // avoids self-signed or proxy TLS issues
     }
@@ -31,6 +63,91 @@ const getReplyTo = () => {
 
 const getAdminEmail = () => {
   return process.env.ADMIN_EMAIL || 'support@zoltanvisa.com';
+};
+
+// Dispatch via ZeptoMail HTTPS REST API (Port 443 - never blocked by cloud firewalls or VPS outbound restrictions)
+const sendViaZeptoRestApi = async ({ to, subject, html, replyTo, bcc, text }) => {
+  const apiKey = process.env.SMTP_PASS;
+  if (!apiKey || apiKey === 'your_zeptomail_api_key_here') {
+    throw new Error('ZeptoMail API key / SMTP_PASS is not configured');
+  }
+
+  const sender = parseAddressString(getSender(), 'noreply@gb.zoltanvisa.com', 'Zoltan Visa');
+  const replyToObj = parseAddressString(replyTo || getReplyTo(), 'support@zoltanvisa.com', 'Zoltan Visa Support');
+  const recipients = parseRecipients(to);
+
+  if (!recipients.length) {
+    throw new Error('No valid recipients provided');
+  }
+
+  const payload = {
+    from: sender,
+    to: recipients,
+    subject,
+    htmlbody: html,
+    reply_to: [replyToObj]
+  };
+
+  if (bcc) {
+    const bccList = parseRecipients(bcc);
+    if (bccList.length) payload.bcc = bccList;
+  }
+
+  if (text) {
+    payload.textbody = text;
+  }
+
+  const payloadStr = JSON.stringify(payload);
+
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: process.env.ZEPTO_API_HOST || 'api.zeptomail.in',
+      port: 443,
+      path: '/v1.1/email',
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'Authorization': `Zoho-enczapikey ${apiKey}`,
+        'Content-Length': Buffer.byteLength(payloadStr)
+      },
+      timeout: 10000
+    };
+
+    const req = https.request(options, (res) => {
+      let responseBody = '';
+      res.on('data', chunk => responseBody += chunk);
+      res.on('end', () => {
+        try {
+          const parsed = JSON.parse(responseBody);
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve({
+              success: true,
+              messageId: parsed.request_id || parsed.data?.[0]?.message || 'EM_SENT',
+              via: 'https-api'
+            });
+          } else {
+            const errDetail = parsed.message || parsed.error?.message || responseBody;
+            reject(new Error(`ZeptoMail HTTP API error (${res.statusCode}): ${errDetail}`));
+          }
+        } catch (e) {
+          reject(new Error(`Invalid response from ZeptoMail HTTP API: ${responseBody}`));
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(new Error(`ZeptoMail HTTP API connection failed: ${err.message}`));
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('ZeptoMail HTTP API timed out after 10s'));
+    });
+
+    req.write(payloadStr);
+    req.end();
+  });
 };
 
 // Helper to safely parse user_data if string or null
@@ -64,6 +181,20 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
       };
     }
 
+    // 1. Try ZeptoMail HTTPS REST API first (Port 443 - immune to DigitalOcean/VPS SMTP port blocking)
+    const isZepto = (process.env.SMTP_HOST || '').includes('zeptomail') || !process.env.SMTP_HOST;
+    if (isZepto) {
+      try {
+        console.log(`[emailService] Sending email to: ${to}, subject: "${subject}" via ZeptoMail HTTPS API...`);
+        const result = await sendViaZeptoRestApi({ to, subject, html, replyTo, bcc, text });
+        console.log(`[emailService] Email sent successfully via ZeptoMail HTTPS API! Request ID: ${result.messageId}`);
+        return result;
+      } catch (apiErr) {
+        console.warn(`[emailService] ZeptoMail HTTPS API failed (${apiErr.message}). Falling back to SMTP...`);
+      }
+    }
+
+    // 2. SMTP Fallback with strict timeouts
     const transporter = getTransporter();
     const mailOptions = {
       from: getSender(),
@@ -75,10 +206,10 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
       ...(text ? { text } : {})
     };
 
-    console.log(`[emailService] Sending email to: ${to}, subject: "${subject}" via ZeptoMail...`);
+    console.log(`[emailService] Sending email to: ${to}, subject: "${subject}" via SMTP fallback...`);
     try {
       const info = await transporter.sendMail(mailOptions);
-      console.log(`[emailService] Email sent successfully! Message ID: ${info.messageId}`);
+      console.log(`[emailService] Email sent successfully via SMTP! Message ID: ${info.messageId}`);
       return { success: true, messageId: info.messageId };
     } catch (sendErr) {
       const fallbackSender = '"Zoltan Visa" <noreply@gb.zoltanvisa.com>';
