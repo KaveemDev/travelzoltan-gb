@@ -22,7 +22,7 @@ const getTransporter = () => {
 };
 
 const getSender = () => {
-  return process.env.EMAIL_FROM || '"Zoltan Visa" <noreply@zovotel.com>';
+  return process.env.EMAIL_FROM || '"Zoltan Visa" <noreply@gb.zoltanvisa.com>';
 };
 
 const getReplyTo = () => {
@@ -31,6 +31,19 @@ const getReplyTo = () => {
 
 const getAdminEmail = () => {
   return process.env.ADMIN_EMAIL || 'support@zoltanvisa.com';
+};
+
+// Helper to safely parse user_data if string or null
+const parseUserData = (data) => {
+  if (!data) return {};
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch {
+      return {};
+    }
+  }
+  return data;
 };
 
 // Safe email dispatch wrapper
@@ -63,9 +76,21 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
     };
 
     console.log(`[emailService] Sending email to: ${to}, subject: "${subject}" via ZeptoMail...`);
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`[emailService] Email sent successfully! Message ID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+    try {
+      const info = await transporter.sendMail(mailOptions);
+      console.log(`[emailService] Email sent successfully! Message ID: ${info.messageId}`);
+      return { success: true, messageId: info.messageId };
+    } catch (sendErr) {
+      const fallbackSender = '"Zoltan Visa" <noreply@gb.zoltanvisa.com>';
+      if (sendErr.message && (sendErr.message.includes('553') || sendErr.message.includes('not allowed to relay')) && mailOptions.from !== fallbackSender) {
+        console.warn(`[emailService] ZeptoMail rejected sender domain (${mailOptions.from}) with 553. Retrying with verified default sender: ${fallbackSender}...`);
+        mailOptions.from = fallbackSender;
+        const retryInfo = await transporter.sendMail(mailOptions);
+        console.log(`[emailService] Fallback email sent successfully! Message ID: ${retryInfo.messageId}`);
+        return { success: true, messageId: retryInfo.messageId, fallbackUsed: true };
+      }
+      throw sendErr;
+    }
   } catch (error) {
     console.error('[emailService] Error sending email:', error.message);
     return { success: false, error: error.message };
@@ -160,8 +185,8 @@ const getBaseEmailLayout = (content, preheader = '') => `
  * 1. Send Official Tax Invoice & Payment Receipt to Applicant
  */
 const sendInvoiceEmail = async ({ application, paymentDetails = {} }) => {
-  const userData = application.user_data || {};
-  const applicantEmail = userData.email;
+  const userData = parseUserData(application.user_data);
+  const applicantEmail = userData.email || userData.emailAddress;
   const applicantName = userData.fullName || [userData.name, userData.surname].filter(Boolean).join(' ') || 'Valued Client';
   const passportNumber = userData.passportNumber || 'On file';
   const residentialAddress = userData.residentialAddress || 'N/A';
@@ -282,7 +307,7 @@ const sendInvoiceEmail = async ({ application, paymentDetails = {} }) => {
  * 2. Send Immediate Payment Alert to Admin (support@zoltanvisa.com)
  */
 const sendAdminPaymentAlert = async ({ application, paymentDetails = {} }) => {
-  const userData = application.user_data || {};
+  const userData = parseUserData(application.user_data);
   const applicantName = userData.fullName || [userData.name, userData.surname].filter(Boolean).join(' ') || 'Applicant';
   const config = application.visaConfiguration || {};
   const citizenship = config.citizenship || userData.citizenship || 'United Kingdom';
@@ -352,8 +377,8 @@ const sendAdminPaymentAlert = async ({ application, paymentDetails = {} }) => {
  * 3. Send Application Submission Confirmation to Applicant
  */
 const sendApplicationConfirmationEmail = async ({ application, documents = [] }) => {
-  const userData = application.user_data || {};
-  const applicantEmail = userData.email;
+  const userData = parseUserData(application.user_data);
+  const applicantEmail = userData.email || userData.emailAddress;
   const applicantName = userData.fullName || [userData.name, userData.surname].filter(Boolean).join(' ') || 'Valued Client';
   const config = application.visaConfiguration || {};
   const route = `${config.citizenship || userData.citizenship || 'UK'} to ${config.destination || userData.destination || 'Destination'}`;
@@ -412,7 +437,7 @@ const sendApplicationConfirmationEmail = async ({ application, documents = [] })
  * 4. Send Application Alert to Admin
  */
 const sendAdminNewApplicationAlert = async ({ application, documents = [] }) => {
-  const userData = application.user_data || {};
+  const userData = parseUserData(application.user_data);
   const applicantName = userData.fullName || [userData.name, userData.surname].filter(Boolean).join(' ') || 'Applicant';
   const config = application.visaConfiguration || {};
   const route = `${config.citizenship || userData.citizenship || 'UK'} to ${config.destination || userData.destination || 'Destination'}`;
@@ -468,8 +493,9 @@ const sendAdminNewApplicationAlert = async ({ application, documents = [] }) => 
  * 5. Send Inquiry Acknowledgment to Applicant
  */
 const sendQueryAcknowledgmentEmail = async ({ queryData }) => {
-  const applicantName = queryData.fullName || queryData.name || 'Prospective Traveler';
-  const queryType = queryData.queryType || 'Visa Inquiry';
+  const data = parseUserData(queryData);
+  const applicantName = data.fullName || data.name || 'Prospective Traveler';
+  const queryType = data.queryType || 'Visa Inquiry';
 
   const content = `
     <div style="margin-bottom: 20px;">
@@ -480,20 +506,20 @@ const sendQueryAcknowledgmentEmail = async ({ queryData }) => {
 
     <p style="font-size: 14px;">
       Dear <strong>${applicantName}</strong>,<br>
-      Thank you for reaching out to Zoltan Visa. One of our dedicated visa specialists is reviewing your inquiry regarding <strong>${queryData.destination || 'your upcoming trip'}</strong>.
+      Thank you for reaching out to Zoltan Visa. One of our dedicated visa specialists is reviewing your inquiry regarding <strong>${data.destination || 'your upcoming trip'}</strong>.
     </p>
 
     <div class="highlight-box">
       <p style="margin: 0 0 6px 0; font-weight: 700; color: #1e3a8a;">Estimated Response Time</p>
       <p style="margin: 0; font-size: 12px; color: #334155;">
-        A visa consultant will reach out via <strong>${queryData.preferredContact || 'WhatsApp or Email'}</strong> shortly during business hours.
+        A visa consultant will reach out via <strong>${data.preferredContact || 'WhatsApp or Email'}</strong> shortly during business hours.
       </p>
     </div>
 
-    ${queryData.message ? `
+    ${data.message ? `
       <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px; font-size: 12px; color: #475569; margin: 16px 0;">
         <strong style="color: #0f172a;">Your Message:</strong><br>
-        "${queryData.message}"
+        "${data.message}"
       </div>
     ` : ''}
 
@@ -505,7 +531,7 @@ const sendQueryAcknowledgmentEmail = async ({ queryData }) => {
   const html = getBaseEmailLayout(content, `We've received your query - Zoltan Visa Concierge`);
 
   return await sendEmail({
-    to: queryData.email,
+    to: data.email,
     subject: `We've received your query - Zoltan Visa Concierge`,
     html,
     replyTo: getReplyTo()
@@ -516,18 +542,19 @@ const sendQueryAcknowledgmentEmail = async ({ queryData }) => {
  * 6. Send Inquiry Lead Alert to Admin (support@zoltanvisa.com)
  */
 const sendAdminQueryAlert = async ({ queryData }) => {
-  const applicantName = queryData.fullName || [queryData.name, queryData.surname].filter(Boolean).join(' ') || 'Prospective Client';
-  const queryType = queryData.queryType || 'Visa Inquiry';
+  const data = parseUserData(queryData);
+  const applicantName = data.fullName || [data.name, data.surname].filter(Boolean).join(' ') || 'Prospective Client';
+  const queryType = data.queryType || 'Visa Inquiry';
 
   // Format dynamic answers if present
   let answersHtml = '';
-  if (queryData.queryAnswers && typeof queryData.queryAnswers === 'object') {
-    const keys = Object.keys(queryData.queryAnswers);
+  if (data.queryAnswers && typeof data.queryAnswers === 'object') {
+    const keys = Object.keys(data.queryAnswers);
     if (keys.length > 0) {
       answersHtml = `
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; margin-top: 12px;">
           <p style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin: 0 0 6px 0;">Form Responses</p>
-          ${keys.map(k => `<p style="margin: 0 0 4px 0; font-size: 12px;"><strong>${k}:</strong> ${queryData.queryAnswers[k]}</p>`).join('')}
+          ${keys.map(k => `<p style="margin: 0 0 4px 0; font-size: 12px;"><strong>${k}:</strong> ${data.queryAnswers[k]}</p>`).join('')}
         </div>
       `;
     }
@@ -537,7 +564,7 @@ const sendAdminQueryAlert = async ({ queryData }) => {
     <div style="margin-bottom: 20px;">
       <span class="badge badge-warning">&bull; NEW LEAD / INQUIRY</span>
       <h2 style="font-size: 20px; font-weight: 800; color: #0f172a; margin: 10px 0 4px 0;">New Visa Inquiry Submitted</h2>
-      <p style="font-size: 13px; color: #64748b; margin: 0;">Source: ${queryData.source || 'Website Query Form'} &middot; Type: <strong>${queryType}</strong></p>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">Source: ${data.source || 'Website Query Form'} &middot; Type: <strong>${queryType}</strong></p>
     </div>
 
     <table class="table-details" cellpadding="0" cellspacing="0">
@@ -547,24 +574,24 @@ const sendAdminQueryAlert = async ({ queryData }) => {
       </tr>
       <tr>
         <th>Email</th>
-        <td><a href="mailto:${queryData.email}">${queryData.email || 'N/A'}</a></td>
+        <td><a href="mailto:${data.email}">${data.email || 'N/A'}</a></td>
       </tr>
       <tr>
         <th>Phone</th>
-        <td>${queryData.phone || queryData.phoneLocal || 'N/A'}</td>
+        <td>${data.phone || data.phoneLocal || 'N/A'}</td>
       </tr>
       <tr>
         <th>Preferred Contact</th>
-        <td><strong style="color: #2563eb;">${queryData.preferredContact || 'WhatsApp'}</strong></td>
+        <td><strong style="color: #2563eb;">${data.preferredContact || 'WhatsApp'}</strong></td>
       </tr>
       <tr>
         <th>Citizenship &rarr; Destination</th>
-        <td>${queryData.citizenship || 'N/A'} &rarr; ${queryData.destination || 'N/A'}</td>
+        <td>${data.citizenship || 'N/A'} &rarr; ${data.destination || 'N/A'}</td>
       </tr>
-      ${queryData.message ? `
+      ${data.message ? `
       <tr>
         <th>Applicant Message</th>
-        <td>${queryData.message}</td>
+        <td>${data.message}</td>
       </tr>
       ` : ''}
     </table>
@@ -573,12 +600,12 @@ const sendAdminQueryAlert = async ({ queryData }) => {
 
     <!-- Instant Reach-out CTAs -->
     <div style="margin-top: 24px; text-align: center;">
-      ${queryData.phone ? `
-        <a href="https://wa.me/${queryData.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${applicantName}, this is Zoltan Visa regarding your inquiry for ${queryData.destination || 'your visa'}.`)}" class="button" style="background-color: #059669; margin-right: 8px;" target="_blank">
+      ${data.phone ? `
+        <a href="https://wa.me/${data.phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hello ${applicantName}, this is Zoltan Visa regarding your inquiry for ${data.destination || 'your visa'}.`)}" class="button" style="background-color: #059669; margin-right: 8px;" target="_blank">
           Reach via WhatsApp
         </a>
       ` : ''}
-      <a href="mailto:${queryData.email}?subject=${encodeURIComponent(`Zoltan Visa - Regarding Your Inquiry`)}" class="button" style="background-color: #2563eb;" target="_blank">
+      <a href="mailto:${data.email}?subject=${encodeURIComponent(`Zoltan Visa - Regarding Your Inquiry`)}" class="button" style="background-color: #2563eb;" target="_blank">
         Reply via Email
       </a>
     </div>
@@ -590,7 +617,7 @@ const sendAdminQueryAlert = async ({ queryData }) => {
     to: getAdminEmail(),
     subject: `[NEW INQUIRY] ${applicantName} - ${queryType}`,
     html,
-    replyTo: queryData.email || getReplyTo()
+    replyTo: data.email || getReplyTo()
   });
 };
 
@@ -598,8 +625,8 @@ const sendAdminQueryAlert = async ({ queryData }) => {
  * 7. Send Status Update Email to Applicant
  */
 const sendStatusUpdateEmail = async ({ application, newStatus, notes = '' }) => {
-  const userData = application.user_data || {};
-  const applicantEmail = userData.email;
+  const userData = parseUserData(application.user_data);
+  const applicantEmail = userData.email || userData.emailAddress;
   const applicantName = userData.fullName || [userData.name, userData.surname].filter(Boolean).join(' ') || 'Valued Client';
   const config = application.visaConfiguration || {};
   const route = `${config.citizenship || userData.citizenship || 'UK'} to ${config.destination || userData.destination || 'Destination'}`;

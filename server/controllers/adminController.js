@@ -566,7 +566,18 @@ const sendApplicationInvoice = async (req, res) => {
       return res.status(404).json({ message: 'Application not found' });
     }
 
-    if (!application.user_data?.email) {
+    let userData = application.user_data;
+    if (typeof userData === 'string') {
+      try {
+        userData = JSON.parse(userData);
+      } catch (e) {
+        userData = {};
+      }
+    }
+    userData = userData || {};
+
+    const applicantEmail = userData.email || userData.emailAddress;
+    if (!applicantEmail) {
       return res.status(400).json({ message: 'No email address registered for this applicant.' });
     }
 

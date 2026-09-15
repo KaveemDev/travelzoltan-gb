@@ -66,7 +66,8 @@ const AdminPage = () => {
       showNotification(res.message || 'Invoice and receipt email dispatched successfully!');
     } catch (err) {
       console.error('Error sending invoice:', err);
-      showNotification(err.message || 'Failed to send invoice email', 'error');
+      const errorMsg = err.error ? `${err.message || 'Failed to send invoice email'}: ${err.error}` : (err.message || 'Failed to send invoice email');
+      showNotification(errorMsg, 'error');
     } finally {
       setSendingInvoice(false);
     }
@@ -81,7 +82,8 @@ const AdminPage = () => {
       showNotification(res.message || 'Test email dispatched successfully!');
     } catch (err) {
       console.error('Error sending test email:', err);
-      showNotification(err.message || 'Failed to send test email', 'error');
+      const errorMsg = err.error ? `${err.message || 'Failed to send test email'}: ${err.error}` : (err.message || 'Failed to send test email');
+      showNotification(errorMsg, 'error');
     } finally {
       setTestingEmail(false);
     }
