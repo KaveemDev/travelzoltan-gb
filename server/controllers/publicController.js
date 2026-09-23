@@ -3,11 +3,18 @@ const uploadService = require('../services/uploadService');
 const emailService = require('../services/emailService');
 const Razorpay = require('razorpay');
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay safely
+let razorpay;
+try {
+  if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET
+    });
+  }
+} catch (e) {
+  console.warn('[publicController] Razorpay initialization warning:', e.message);
+}
 
 // GET /api/visa-options - Get unique citizenships and destinations
 const getVisaOptions = async (req, res) => {
@@ -316,6 +323,57 @@ const DEFAULT_VISA_REQUIREMENTS = {
   is_default: true
 };
 
+const normalizeServiceFee = (serviceFee) => {
+  let fee = serviceFee;
+  if (typeof fee === 'string') {
+    try {
+      fee = JSON.parse(fee);
+    } catch {
+      fee = {};
+    }
+  }
+  if (typeof fee === 'number') {
+    fee = {
+      total_amount: fee,
+      pay_now_amount: fee,
+      pay_in_full_amount: 0,
+      admin_fee: 0,
+      express_fee: 0,
+      service_fee: fee
+    };
+  }
+  if (!fee || typeof fee !== 'object') {
+    fee = {
+      total_amount: 0,
+      pay_now_amount: 0,
+      pay_in_full_amount: 0
+    };
+  }
+
+  // Ensure whats_included is always an array of non-empty strings.
+  // If missing or empty, fall back to DEFAULT_WHATS_INCLUDED from the backend!
+  let whatsIncluded = fee.whats_included;
+  if (typeof whatsIncluded === 'string') {
+    try {
+      whatsIncluded = JSON.parse(whatsIncluded);
+    } catch {
+      whatsIncluded = whatsIncluded.split('\n');
+    }
+  }
+  if (!Array.isArray(whatsIncluded) || whatsIncluded.filter(p => typeof p === 'string' && p.trim()).length === 0) {
+    whatsIncluded = [...DEFAULT_WHATS_INCLUDED];
+  } else {
+    whatsIncluded = whatsIncluded
+      .filter(p => typeof p === 'string' && p.trim())
+      .map(p => p.trim());
+  }
+
+  return {
+    ...fee,
+    whats_included: whatsIncluded
+  };
+};
+
 // GET /api/visa-requirements?citizenship=X&destination=Y
 const getVisaRequirements = async (req, res) => {
   try {
@@ -325,19 +383,48 @@ const getVisaRequirements = async (req, res) => {
       return res.status(400).json({ message: 'Citizenship and destination are required parameters.' });
     }
 
-    const config = await VisaConfiguration.findOne({
+    const trimmedCitizenship = citizenship.trim();
+    const trimmedDestination = destination.trim();
+
+    let config = await VisaConfiguration.findOne({
       where: { 
-        citizenship: citizenship.trim(), 
-        destination: destination.trim() 
+        citizenship: trimmedCitizenship, 
+        destination: trimmedDestination 
       }
     });
+
+    if (!config) {
+      // Check common aliases (e.g. Europe (Schengen States) <-> Schengen (Europe), USA <-> United States Of America (USA))
+      const destinationAliases = {
+        'europe (schengen states)': ['Schengen (Europe)', 'Europe (Schengen States)'],
+        'schengen (europe)': ['Europe (Schengen States)', 'Schengen (Europe)'],
+        'usa': ['United States Of America (USA)', 'United States of America (USA) (ETA)', 'USA'],
+        'united states of america (usa)': ['USA', 'United States of America (USA) (ETA)'],
+        'australia': ['Australia (ETA)', 'Australia'],
+        'canada': ['Canada (ETA)', 'Canada'],
+        'new zealand': ['New Zealand (ETA)', 'New Zealand']
+      };
+
+      const key = trimmedDestination.toLowerCase();
+      const candidates = destinationAliases[key] || [];
+
+      for (const altDest of candidates) {
+        config = await VisaConfiguration.findOne({
+          where: {
+            citizenship: trimmedCitizenship,
+            destination: altDest
+          }
+        });
+        if (config) break;
+      }
+    }
 
     if (!config || !config.required_documents) {
       return res.status(200).json(DEFAULT_VISA_REQUIREMENTS);
     }
 
     return res.status(200).json({
-      service_fee: config.service_fee,
+      service_fee: normalizeServiceFee(config.service_fee),
       required_documents: normalizeRequiredDocs(config.required_documents),
       form_schema: config.form_schema,
       configuration_id: config.id,
@@ -1021,5 +1108,7 @@ module.exports = {
   createPaymentIntent,
   createPaymentOrder,
   verifyPayment,
-  getApplicationAgreement
+  getApplicationAgreement,
+  normalizeServiceFee,
+  DEFAULT_WHATS_INCLUDED
 };

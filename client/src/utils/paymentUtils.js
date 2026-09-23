@@ -45,13 +45,33 @@ export const hasPayInFullOption = (serviceFee) => {
   return false;
 };
 
+// Helper to safely parse JSON or return original value
+const safeParse = (val) => {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val);
+    } catch {
+      return val;
+    }
+  }
+  return val;
+};
+
 /**
  * Returns array of Pay Now points (with fallback to default)
  */
 export const getPayNowPoints = (serviceFee) => {
-  if (serviceFee && typeof serviceFee === 'object' && Array.isArray(serviceFee.pay_now_points) && serviceFee.pay_now_points.length > 0) {
-    const filtered = serviceFee.pay_now_points.filter(p => typeof p === 'string' && p.trim().length > 0);
-    if (filtered.length > 0) return filtered;
+  const fee = safeParse(serviceFee);
+  if (fee && typeof fee === 'object') {
+    let candidate = fee.pay_now_points;
+    candidate = safeParse(candidate);
+    if (typeof candidate === 'string') {
+      candidate = candidate.split('\n');
+    }
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      const filtered = candidate.filter(p => typeof p === 'string' && p.trim().length > 0).map(p => p.trim());
+      if (filtered.length > 0) return filtered;
+    }
   }
   return DEFAULT_PAY_NOW_POINTS;
 };
@@ -60,9 +80,17 @@ export const getPayNowPoints = (serviceFee) => {
  * Returns array of Pay in Full points (with fallback to default)
  */
 export const getPayInFullPoints = (serviceFee) => {
-  if (serviceFee && typeof serviceFee === 'object' && Array.isArray(serviceFee.pay_in_full_points) && serviceFee.pay_in_full_points.length > 0) {
-    const filtered = serviceFee.pay_in_full_points.filter(p => typeof p === 'string' && p.trim().length > 0);
-    if (filtered.length > 0) return filtered;
+  const fee = safeParse(serviceFee);
+  if (fee && typeof fee === 'object') {
+    let candidate = fee.pay_in_full_points;
+    candidate = safeParse(candidate);
+    if (typeof candidate === 'string') {
+      candidate = candidate.split('\n');
+    }
+    if (Array.isArray(candidate) && candidate.length > 0) {
+      const filtered = candidate.filter(p => typeof p === 'string' && p.trim().length > 0).map(p => p.trim());
+      if (filtered.length > 0) return filtered;
+    }
   }
   return DEFAULT_PAY_IN_FULL_POINTS;
 };
@@ -71,14 +99,33 @@ export const getPayInFullPoints = (serviceFee) => {
  * Returns array of "What's Included in Your Service" points (with fallback to default)
  */
 export const getWhatsIncludedPoints = (source) => {
-  if (Array.isArray(source) && source.length > 0) {
-    const filtered = source.filter(p => typeof p === 'string' && p.trim().length > 0);
+  if (!source) return DEFAULT_WHATS_INCLUDED_POINTS;
+
+  let data = safeParse(source);
+
+  // If data itself is a newline-separated string
+  if (typeof data === 'string') {
+    if (data.includes('\n')) {
+      const lines = data.split('\n').map(p => p.trim()).filter(Boolean);
+      if (lines.length > 0) return lines;
+    }
+    if (data.trim().length > 0) return [data.trim()];
+    return DEFAULT_WHATS_INCLUDED_POINTS;
+  }
+
+  if (Array.isArray(data) && data.length > 0) {
+    const filtered = data.filter(p => typeof p === 'string' && p.trim().length > 0).map(p => p.trim());
     if (filtered.length > 0) return filtered;
   }
-  if (source && typeof source === 'object') {
-    const candidate = source.whats_included || source.service_fee?.whats_included || source.form_schema?.whats_included;
+
+  if (data && typeof data === 'object') {
+    let candidate = data.whats_included || data.service_fee?.whats_included || data.form_schema?.whats_included;
+    candidate = safeParse(candidate);
+    if (typeof candidate === 'string') {
+      candidate = candidate.split('\n');
+    }
     if (Array.isArray(candidate) && candidate.length > 0) {
-      const filtered = candidate.filter(p => typeof p === 'string' && p.trim().length > 0);
+      const filtered = candidate.filter(p => typeof p === 'string' && p.trim().length > 0).map(p => p.trim());
       if (filtered.length > 0) return filtered;
     }
   }

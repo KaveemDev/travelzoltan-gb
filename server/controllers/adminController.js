@@ -1,6 +1,7 @@
 const { VisaConfiguration, Application, Document, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const emailService = require('../services/emailService');
+const { normalizeServiceFee } = require('./publicController');
 
 // Helper function to calculate total fee from breakdown
 const calculateTotalFee = (serviceFee) => {
@@ -411,7 +412,14 @@ const getAllConfigurations = async (req, res) => {
     const configurations = await VisaConfiguration.findAll({
       order: [['sort_order', 'ASC'], ['id', 'ASC']]
     });
-    return res.status(200).json(configurations);
+    const normalized = configurations.map(c => {
+      const plain = c.toJSON ? c.toJSON() : c;
+      return {
+        ...plain,
+        service_fee: normalizeServiceFee(plain.service_fee)
+      };
+    });
+    return res.status(200).json(normalized);
   } catch (error) {
     console.error('Error fetching configurations:', error);
     return res.status(500).json({ message: 'Internal server error' });
@@ -434,10 +442,12 @@ const createConfiguration = async (req, res) => {
       return res.status(400).json({ message: 'Configuration for this route already exists' });
     }
 
+    const normalizedFee = normalizeServiceFee(service_fee);
+
     const config = await VisaConfiguration.create({
       citizenship: trimmedCitizenship,
       destination: trimmedDestination,
-      service_fee,
+      service_fee: normalizedFee,
       required_documents,
       form_schema
     });
@@ -453,7 +463,7 @@ const createConfiguration = async (req, res) => {
 const updateConfiguration = async (req, res) => {
   try {
     const { id } = req.params;
-    const { service_fee, required_documents, form_schema } = req.body;
+    const { citizenship, destination, service_fee, required_documents, form_schema, sort_order } = req.body;
 
     const configuration = await VisaConfiguration.findByPk(id);
 
@@ -461,10 +471,32 @@ const updateConfiguration = async (req, res) => {
       return res.status(404).json({ message: 'Visa configuration not found.' });
     }
 
-    if (service_fee !== undefined) configuration.service_fee = service_fee;
-    if (required_documents !== undefined) configuration.required_documents = required_documents;
-    if (form_schema !== undefined) configuration.form_schema = form_schema;
-    if (req.body.sort_order !== undefined) configuration.sort_order = req.body.sort_order;
+    if (citizenship !== undefined && citizenship.trim()) {
+      configuration.citizenship = citizenship.trim();
+    }
+    if (destination !== undefined && destination.trim()) {
+      configuration.destination = destination.trim();
+    }
+    if (service_fee !== undefined) {
+      const normalizedFee = normalizeServiceFee(service_fee);
+      configuration.service_fee = normalizedFee;
+      configuration.changed('service_fee', true);
+    }
+    if (required_documents !== undefined) {
+      configuration.required_documents = required_documents;
+      configuration.changed('required_documents', true);
+    }
+    if (form_schema !== undefined) {
+      configuration.form_schema = form_schema;
+      configuration.changed('form_schema', true);
+    }
+    if (sort_order !== undefined) {
+      configuration.sort_order = sort_order;
+      configuration.changed('sort_order', true);
+    } else if (req.body.sort_order !== undefined) {
+      configuration.sort_order = req.body.sort_order;
+      configuration.changed('sort_order', true);
+    }
 
     await configuration.save();
 
