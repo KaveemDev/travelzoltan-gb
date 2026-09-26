@@ -848,6 +848,73 @@ const sendTestEmail = async (targetEmail) => {
   });
 };
 
+// Send custom payment link email to customer
+const sendCustomPaymentLinkEmail = async ({ customerName, customerEmail, amount, currency = 'GBP', description, paymentLink, referenceId, notes }) => {
+  if (!customerEmail) return { success: false, reason: 'No customer email provided' };
+
+  const currencySymbol = currency === 'GBP' ? '£' : currency === 'INR' ? '₹' : currency === 'USD' ? '$' : currency === 'EUR' ? '€' : `${currency} `;
+  const formattedAmount = `${currencySymbol}${parseFloat(amount).toFixed(2)}`;
+
+  const content = `
+    <div style="margin-bottom: 24px;">
+      <span class="badge badge-primary">Payment Request</span>
+      <h2 style="font-size: 22px; font-weight: 800; color: #0f172a; margin: 12px 0 6px 0;">Payment Link from Zoltan Visa</h2>
+      <p style="font-size: 13px; color: #64748b; margin: 0;">Ref: <strong>${referenceId || 'N/A'}</strong></p>
+    </div>
+
+    <p style="font-size: 15px; color: #334155; line-height: 1.6;">
+      Dear <strong>${customerName || 'Valued Client'}</strong>,<br>
+      Please find your requested payment link below. You can complete your transaction securely online using your preferred payment method (Credit/Debit Card, Netbanking, or UPI).
+    </p>
+
+    <!-- Payment Summary Box -->
+    <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 24px 0;">
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr>
+          <td style="font-size: 13px; color: #64748b; padding: 6px 0;">Service / Description:</td>
+          <td style="font-size: 14px; font-weight: 600; color: #0f172a; text-align: right; padding: 6px 0;">${description || 'Visa Processing & Consultation'}</td>
+        </tr>
+        <tr>
+          <td style="font-size: 13px; color: #64748b; padding: 6px 0;">Total Payable:</td>
+          <td style="font-size: 20px; font-weight: 800; color: #ff3366; text-align: right; padding: 6px 0;">${formattedAmount}</td>
+        </tr>
+        ${notes ? `
+        <tr>
+          <td style="font-size: 13px; color: #64748b; padding: 6px 0; vertical-align: top;">Notes:</td>
+          <td style="font-size: 13px; color: #475569; text-align: right; padding: 6px 0;">${notes}</td>
+        </tr>
+        ` : ''}
+      </table>
+    </div>
+
+    <!-- Call to action button -->
+    <div style="text-align: center; margin: 30px 0;">
+      <a href="${paymentLink}" target="_blank" style="display: inline-block; background: linear-gradient(135deg, #ff3366 0%, #da3054 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; font-size: 15px; font-weight: 700; border-radius: 10px; box-shadow: 0 4px 12px rgba(255, 51, 102, 0.25);">
+        Pay Now (${formattedAmount}) &rarr;
+      </a>
+    </div>
+
+    <p style="font-size: 12px; color: #94a3b8; text-align: center; margin-top: 15px;">
+      Direct payment link: <a href="${paymentLink}" style="color: #2563eb; word-break: break-all;">${paymentLink}</a>
+    </p>
+
+    <div style="background-color: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px 16px; border-radius: 6px; margin-top: 24px;">
+      <p style="margin: 0; font-size: 12px; color: #1e40af; line-height: 1.5;">
+        🔒 <strong>Secure Checkout:</strong> All payments are processed through Razorpay's PCI-DSS compliant secure infrastructure. If you have any questions, feel free to reply to this email or contact support.
+      </p>
+    </div>
+  `;
+
+  const html = getBaseEmailLayout(content, `Payment Request of ${formattedAmount} from Zoltan Visa`);
+
+  return await sendEmail({
+    to: customerEmail,
+    subject: `Payment Request: ${formattedAmount} for ${description || 'Zoltan Visa Service'}`,
+    html,
+    replyTo: getReplyTo()
+  });
+};
+
 module.exports = {
   sendEmail,
   sendInvoiceEmail,
@@ -857,5 +924,7 @@ module.exports = {
   sendQueryAcknowledgmentEmail,
   sendAdminQueryAlert,
   sendStatusUpdateEmail,
-  sendTestEmail
+  sendTestEmail,
+  sendCustomPaymentLinkEmail
 };
+

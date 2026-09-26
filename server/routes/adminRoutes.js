@@ -3,6 +3,7 @@ const router = express.Router();
 const adminController = require('../controllers/adminController');
 const authController = require('../controllers/authController');
 const liveApprovalController = require('../controllers/liveApprovalController');
+const paymentLinkController = require('../controllers/paymentLinkController');
 const { requireAuth } = require('../middlewares/auth');
 
 // ========== PUBLIC AUTH ROUTES (No authentication required) ==========
@@ -40,6 +41,15 @@ router.post('/send-test-email', adminController.testEmailConfig);
 // Payments
 router.get('/payments', adminController.getAllPayments);
 router.get('/payments/stats', adminController.getPaymentStats);
+
+// Custom Razorpay Payment Links
+router.get('/payment-links', paymentLinkController.getAllPaymentLinks);
+router.get('/payment-links/stats', paymentLinkController.getPaymentLinkStats);
+router.post('/payment-links', paymentLinkController.createPaymentLink);
+router.post('/payment-links/sync-all', paymentLinkController.syncAllPaymentLinks);
+router.post('/payment-links/:id/sync', paymentLinkController.syncPaymentLink);
+router.post('/payment-links/:id/cancel', paymentLinkController.cancelPaymentLink);
+router.post('/payment-links/:id/send-email', paymentLinkController.sendPaymentLinkEmail);
 
 // Analytics
 router.get('/analytics', adminController.getAnalytics);

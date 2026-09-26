@@ -283,6 +283,70 @@ export const adminAPI = {
     }
   },
 
+  // Custom Payment Links (Razorpay)
+  getAllPaymentLinks: async (params = {}) => {
+    try {
+      const response = await api.get('/admin/payment-links', { params });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  getPaymentLinkStats: async () => {
+    try {
+      const response = await api.get('/admin/payment-links/stats');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createPaymentLink: async (data) => {
+    try {
+      const response = await api.post('/admin/payment-links', data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  syncPaymentLink: async (id) => {
+    try {
+      const response = await api.post(`/admin/payment-links/${id}/sync`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  syncAllPaymentLinks: async () => {
+    try {
+      const response = await api.post('/admin/payment-links/sync-all');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  cancelPaymentLink: async (id) => {
+    try {
+      const response = await api.post(`/admin/payment-links/${id}/cancel`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  sendPaymentLinkEmail: async (id, targetEmail) => {
+    try {
+      const response = await api.post(`/admin/payment-links/${id}/send-email`, { targetEmail });
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Analytics
   getAnalytics: async () => {
     try {

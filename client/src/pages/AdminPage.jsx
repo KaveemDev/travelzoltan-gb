@@ -5,6 +5,7 @@ import DocumentViewer from '../components/DocumentViewer';
 import LiveApprovalsTab from '../components/LiveApprovalsTab';
 import TravelVisaAgreementModal from '../components/TravelVisaAgreementModal';
 import ConfigurationsTab from '../components/ConfigurationsTab';
+import PaymentLinksTab from '../components/PaymentLinksTab';
 
 // Format currency helper
 const formatCurrency = (amount) => {
@@ -141,6 +142,7 @@ const AdminPage = () => {
     { id: 'dashboard', label: 'Dashboard', icon: 'dashboard' },
     { id: 'applications', label: 'Applications', icon: 'description' },
     { id: 'payments', label: 'Payments', icon: 'payments' },
+    { id: 'payment-links', label: 'Payment Links', icon: 'add_link' },
     { id: 'analytics', label: 'Analytics', icon: 'analytics' },
     { id: 'configurations', label: 'Configurations', icon: 'tune' },
     { id: 'live-approvals', label: 'Live Approvals', icon: 'verified' },
@@ -436,6 +438,13 @@ const AdminPage = () => {
             >
               <span className="material-symbols-outlined text-lg">add_circle</span>
               New Application Intake
+            </button>
+            <button 
+              onClick={() => setActiveMenu('payment-links')}
+              className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm shadow-sm hover:shadow-md transition-all cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-lg">add_link</span>
+              Create Payment Link
             </button>
             <button 
               onClick={() => handleExport('applications')}
@@ -746,13 +755,23 @@ const AdminPage = () => {
               <h3 className="font-headline text-lg font-bold text-on-surface">Payment History ({payments.length})</h3>
               <p className="text-xs text-outline mt-0.5">Real-time ledger of card and online transactions</p>
             </div>
-            <button 
-              onClick={() => handleExport('payments')}
-              className="flex items-center gap-2 bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/30 text-xs font-bold hover:bg-primary hover:text-white transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-sm">download</span>
-              Export History
-            </button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button 
+                type="button"
+                onClick={() => setActiveMenu('payment-links')}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-primary to-secondary text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">add_link</span>
+                Generate Custom Link
+              </button>
+              <button 
+                onClick={() => handleExport('payments')}
+                className="flex items-center gap-2 bg-surface-container-low px-4 py-2 rounded-xl border border-outline-variant/30 text-xs font-bold hover:bg-primary hover:text-white transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-sm">download</span>
+                Export History
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -1576,6 +1595,7 @@ const AdminPage = () => {
               {activeMenu === 'dashboard' && renderDashboard()}
               {activeMenu === 'applications' && renderApplications()}
               {activeMenu === 'payments' && renderPayments()}
+              {activeMenu === 'payment-links' && <PaymentLinksTab showNotification={showNotification} />}
               {activeMenu === 'analytics' && renderAnalytics()}
               {activeMenu === 'configurations' && <ConfigurationsTab showNotification={showNotification} />}
               {activeMenu === 'live-approvals' && <LiveApprovalsTab showNotification={showNotification} />}
