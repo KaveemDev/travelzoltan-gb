@@ -1184,8 +1184,14 @@ const AdminPage = () => {
 
       {/* Application Detail Modal */}
       {showModal && selectedApplication && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden transform animate-scaleUp">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowModal(false); setSelectedApplication(null); } }}
+        >
+          <div 
+            className="bg-surface-container-lowest border border-outline-variant/30 rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden transform animate-scaleUp text-on-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Modal Header */}
             <div className="p-5 sm:p-6 border-b border-surface-container-high flex items-center justify-between bg-surface-container-lowest shrink-0">
               <div className="flex items-center gap-3">

@@ -51,9 +51,13 @@ app.get('/', (req, res) => {
   });
 });
 
-// Catch-all route for any other non-API routes
-app.get('*', (req, res) => {
-  res.status(404).json({ error: 'Route not found' });
+// Catch-all route for any unhandled routes (all HTTP methods)
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: `Cannot ${req.method} ${req.originalUrl}`,
+    message: 'The requested API route was not found on this server.'
+  });
 });
 
 // Start the server (local dev only, not for Vercel serverless)

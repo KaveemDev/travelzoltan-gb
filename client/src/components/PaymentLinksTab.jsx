@@ -108,6 +108,19 @@ const PaymentLinksTab = ({ showNotification }) => {
     fetchLinks();
   }, []);
 
+  // Handle ESC key to dismiss open modal
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (isCreateOpen) setIsCreateOpen(false);
+        if (createdResult) setCreatedResult(null);
+        if (emailModalLink) setEmailModalLink(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isCreateOpen, createdResult, emailModalLink]);
+
   // Handle Copy Link
   const handleCopyLink = (url, id) => {
     if (!url) return;
@@ -684,16 +697,22 @@ const PaymentLinksTab = ({ showNotification }) => {
       {/* CREATE PAYMENT LINK MODAL                                                */}
       {/* ========================================================================= */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto animate-fadeIn">
-          <div className="bg-surface-container-lowest w-full max-w-2xl rounded-3xl border border-outline-variant/40 shadow-2xl overflow-hidden my-8">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-surface-container-high flex items-center justify-between bg-gradient-to-r from-surface-container-lowest to-surface-container-low">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setIsCreateOpen(false); }}
+        >
+          <div 
+            className="bg-surface-container-lowest w-full max-w-2xl max-h-[90vh] flex flex-col rounded-3xl border border-outline-variant/40 shadow-2xl overflow-hidden animate-scaleUp text-on-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header - Fixed at Top */}
+            <div className="px-6 py-4.5 sm:py-5 border-b border-surface-container-high flex items-center justify-between bg-gradient-to-r from-surface-container-lowest to-surface-container-low shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
                   <span className="material-symbols-outlined text-2xl">add_link</span>
                 </div>
                 <div>
-                  <h3 className="font-headline text-lg font-bold text-on-surface">
+                  <h3 className="font-headline text-base sm:text-lg font-bold text-on-surface">
                     Generate Custom Payment Link
                   </h3>
                   <p className="text-xs text-outline mt-0.5">
@@ -704,189 +723,199 @@ const PaymentLinksTab = ({ showNotification }) => {
               <button
                 type="button"
                 onClick={() => setIsCreateOpen(false)}
-                className="p-2 rounded-xl text-outline hover:bg-surface-container-high transition-colors cursor-pointer"
+                className="w-9 h-9 rounded-xl text-outline hover:text-on-surface hover:bg-surface-container-high transition-colors flex items-center justify-center cursor-pointer"
+                title="Close"
               >
                 <span className="material-symbols-outlined text-xl">close</span>
               </button>
             </div>
 
-            {/* Modal Form */}
-            <form onSubmit={handleCreateSubmit} className="p-6 space-y-5">
-              {/* Amount & Currency Grid */}
-              <div className="bg-surface-container-low/70 p-4 rounded-2xl border border-outline-variant/30 space-y-3">
-                <label className="block text-xs font-bold uppercase tracking-wider text-outline">
-                  Payment Amount & Currency *
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {/* Currency Selector */}
-                  <div className="sm:col-span-1">
-                    <label className="block text-[11px] font-semibold text-outline mb-1">Currency</label>
-                    <select
-                      value={formData.currency}
-                      onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                      className="w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:outline-none cursor-pointer"
-                    >
-                      {CURRENCIES.map(c => (
-                        <option key={c.code} value={c.code}>{c.label}</option>
-                      ))}
-                    </select>
+            {/* Modal Form with Scrollable Body and Pinned Footer */}
+            <form onSubmit={handleCreateSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 sm:space-y-5 min-h-0">
+                {/* Amount & Currency Grid */}
+                <div className="bg-surface-container-low/70 p-4 rounded-2xl border border-outline-variant/30 space-y-3">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-outline">
+                    Payment Amount & Currency *
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+                    {/* Currency Selector (2 cols) */}
+                    <div className="sm:col-span-2">
+                      <label className="block text-[11px] font-semibold text-outline mb-1">Currency</label>
+                      <select
+                        value={formData.currency}
+                        onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+                        className="w-full px-3 py-2.5 text-xs sm:text-sm font-bold bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:outline-none cursor-pointer"
+                      >
+                        {CURRENCIES.map(c => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} ({c.symbol})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Amount Input (3 cols) */}
+                    <div className="sm:col-span-3">
+                      <label className="block text-[11px] font-semibold text-outline mb-1">Amount</label>
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-headline font-bold text-primary text-base">
+                          {CURRENCIES.find(c => c.code === formData.currency)?.symbol || '£'}
+                        </span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.5"
+                          placeholder="150.00"
+                          required
+                          value={formData.amount}
+                          onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                          className="w-full pl-9 pr-4 py-2.5 font-headline text-base font-bold bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
                   </div>
 
-                  {/* Amount Input */}
-                  <div className="sm:col-span-2">
-                    <label className="block text-[11px] font-semibold text-outline mb-1">Amount</label>
-                    <div className="relative">
-                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-headline font-bold text-primary text-base">
-                        {CURRENCIES.find(c => c.code === formData.currency)?.symbol || '£'}
-                      </span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0.5"
-                        placeholder="e.g. 150.00"
-                        required
-                        value={formData.amount}
-                        onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                        className="w-full pl-9 pr-4 py-2.5 font-headline text-base font-bold bg-surface-container-lowest rounded-xl border border-outline-variant/40 focus:border-primary focus:outline-none"
-                      />
+                  {/* Preset Chips */}
+                  {PRESET_AMOUNTS[formData.currency] && (
+                    <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                      <span className="text-[11px] text-outline font-medium mr-1">Quick Select:</span>
+                      {PRESET_AMOUNTS[formData.currency].map(val => (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setFormData({ ...formData, amount: val.toString() })}
+                          className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all cursor-pointer ${
+                            formData.amount === val.toString()
+                              ? 'bg-primary text-white border-primary shadow-xs'
+                              : 'bg-surface-container-lowest border-outline-variant/40 text-on-surface hover:border-primary'
+                          }`}
+                        >
+                          {CURRENCIES.find(c => c.code === formData.currency)?.symbol}{val}
+                        </button>
+                      ))}
                     </div>
+                  )}
+                </div>
+
+                {/* Customer Info Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Customer Full Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. John Doe"
+                      value={formData.customer_name}
+                      onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface mb-1">
+                      Customer Email Address
+                    </label>
+                    <input
+                      type="email"
+                      placeholder="e.g. client@example.com"
+                      value={formData.customer_email}
+                      onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
+                      className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
+                    />
                   </div>
                 </div>
 
-                {/* Preset Chips */}
-                {PRESET_AMOUNTS[formData.currency] && (
-                  <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                    <span className="text-[11px] text-outline font-medium mr-1">Quick Select:</span>
-                    {PRESET_AMOUNTS[formData.currency].map(val => (
-                      <button
-                        key={val}
-                        type="button"
-                        onClick={() => setFormData({ ...formData, amount: val.toString() })}
-                        className={`text-xs px-2.5 py-1 rounded-lg border font-semibold transition-all cursor-pointer ${
-                          formData.amount === val.toString()
-                            ? 'bg-primary text-white border-primary shadow-xs'
-                            : 'bg-surface-container-lowest border-outline-variant/40 text-on-surface hover:border-primary'
-                        }`}
-                      >
-                        {CURRENCIES.find(c => c.code === formData.currency)?.symbol}{val}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Customer Info Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-on-surface mb-1">
-                    Customer Full Name *
+                    Customer Phone / WhatsApp (Optional)
                   </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +447123456789 or +919876543210"
+                    value={formData.customer_phone}
+                    onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
+                    className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
+                  />
+                </div>
+
+                {/* Purpose & Presets */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-bold text-on-surface">
+                      Payment Purpose / Description *
+                    </label>
+                  </div>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. John Doe"
-                    value={formData.customer_name}
-                    onChange={(e) => setFormData({ ...formData, customer_name: e.target.value })}
+                    placeholder="e.g. Consular & Visa Processing Surcharge"
+                    value={formData.description}
+                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
                   />
+
+                  {/* Purpose Suggestions */}
+                  <div className="flex items-center gap-1.5 flex-wrap mt-2">
+                    <span className="text-[11px] text-outline">Suggestions:</span>
+                    {PURPOSE_TEMPLATES.map(tpl => (
+                      <button
+                        key={tpl}
+                        type="button"
+                        onClick={() => setFormData({ ...formData, description: tpl })}
+                        className={`text-[11px] px-2 py-0.5 rounded-md border transition-colors cursor-pointer truncate max-w-[220px] ${
+                          formData.description === tpl
+                            ? 'bg-primary/10 border-primary text-primary font-semibold'
+                            : 'bg-surface-container-low hover:bg-surface-container-high border-outline-variant/20 text-outline'
+                        }`}
+                        title={tpl}
+                      >
+                        {tpl}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
+                {/* Internal Notes */}
                 <div>
                   <label className="block text-xs font-bold text-on-surface mb-1">
-                    Customer Email Address
+                    Internal Administrative Notes (Optional)
                   </label>
-                  <input
-                    type="email"
-                    placeholder="e.g. client@example.com"
-                    value={formData.customer_email}
-                    onChange={(e) => setFormData({ ...formData, customer_email: e.target.value })}
-                    className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
+                  <textarea
+                    rows="2"
+                    placeholder="Reference internal case number, client requirements, or special terms..."
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="w-full px-3.5 py-2 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all resize-none"
                   />
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-bold text-on-surface mb-1">
-                  Customer Phone / WhatsApp (Optional)
-                </label>
-                <input
-                  type="tel"
-                  placeholder="e.g. +447123456789 or +919876543210"
-                  value={formData.customer_phone}
-                  onChange={(e) => setFormData({ ...formData, customer_phone: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
-                />
-              </div>
-
-              {/* Purpose & Presets */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-bold text-on-surface">
-                    Payment Purpose / Description *
+                {/* Send Email Checkbox */}
+                <div className="flex items-center gap-2.5 bg-surface-container-low/60 p-3 rounded-xl border border-outline-variant/20">
+                  <input
+                    type="checkbox"
+                    id="send_email_checkbox"
+                    checked={formData.send_email}
+                    disabled={!formData.customer_email.trim()}
+                    onChange={(e) => setFormData({ ...formData, send_email: e.target.checked })}
+                    className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
+                  />
+                  <label htmlFor="send_email_checkbox" className={`text-xs select-none cursor-pointer ${!formData.customer_email.trim() ? 'opacity-60 text-outline' : 'text-on-surface font-medium'}`}>
+                    Automatically send branded payment link email to customer upon creation
+                    {!formData.customer_email.trim() && ' (Requires customer email)'}
                   </label>
                 </div>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Fast-Track Consular Visa Processing Fee"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3.5 py-2.5 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
-                />
-
-                {/* Purpose Suggestions */}
-                <div className="flex items-center gap-1.5 flex-wrap mt-2">
-                  <span className="text-[11px] text-outline">Suggestions:</span>
-                  {PURPOSE_TEMPLATES.map(tpl => (
-                    <button
-                      key={tpl}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, description: tpl })}
-                      className="text-[11px] px-2 py-0.5 rounded-md bg-surface-container-low hover:bg-surface-container-high border border-outline-variant/20 text-outline transition-colors cursor-pointer truncate max-w-[220px]"
-                      title={tpl}
-                    >
-                      {tpl}
-                    </button>
-                  ))}
-                </div>
               </div>
 
-              {/* Internal Notes */}
-              <div>
-                <label className="block text-xs font-bold text-on-surface mb-1">
-                  Internal Administrative Notes (Optional)
-                </label>
-                <textarea
-                  rows="2"
-                  placeholder="Reference internal case number, client requirements, or special terms..."
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  className="w-full px-3.5 py-2 text-xs sm:text-sm bg-surface-container-low rounded-xl border border-outline-variant/30 focus:border-primary focus:bg-surface-container-lowest focus:outline-none transition-all"
-                />
-              </div>
-
-              {/* Send Email Checkbox */}
-              <div className="flex items-center gap-2.5 bg-surface-container-low/60 p-3 rounded-xl border border-outline-variant/20">
-                <input
-                  type="checkbox"
-                  id="send_email_checkbox"
-                  checked={formData.send_email}
-                  disabled={!formData.customer_email.trim()}
-                  onChange={(e) => setFormData({ ...formData, send_email: e.target.checked })}
-                  className="w-4 h-4 rounded text-primary focus:ring-primary cursor-pointer disabled:opacity-50"
-                />
-                <label htmlFor="send_email_checkbox" className={`text-xs select-none cursor-pointer ${!formData.customer_email.trim() ? 'opacity-60' : 'text-on-surface font-medium'}`}>
-                  Automatically send branded payment link email to customer upon creation
-                  {!formData.customer_email.trim() && ' (Requires customer email)'}
-                </label>
-              </div>
-
-              {/* Modal Footer */}
-              <div className="pt-4 border-t border-surface-container-high flex items-center justify-end gap-3">
+              {/* Modal Footer - Fixed at Bottom */}
+              <div className="px-6 py-3.5 sm:py-4 border-t border-surface-container-high bg-surface-container-low/60 backdrop-blur-xs flex items-center justify-end gap-3 shrink-0">
                 <button
                   type="button"
                   onClick={() => setIsCreateOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-outline-variant/30 text-xs font-bold hover:bg-surface-container-low transition-all cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-outline-variant/30 text-xs sm:text-sm font-bold text-on-surface hover:bg-surface-container-high transition-all cursor-pointer"
                 >
                   Cancel
                 </button>
@@ -894,7 +923,7 @@ const PaymentLinksTab = ({ showNotification }) => {
                 <button
                   type="submit"
                   disabled={createSubmitting}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-secondary text-white text-xs md:text-sm font-bold shadow-md shadow-primary/20 hover:shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-primary to-secondary text-white text-xs sm:text-sm font-bold shadow-md shadow-primary/20 hover:shadow-lg transition-all cursor-pointer disabled:opacity-50"
                 >
                   {createSubmitting ? (
                     <>
@@ -918,96 +947,104 @@ const PaymentLinksTab = ({ showNotification }) => {
       {/* LINK GENERATION SUCCESS MODAL                                            */}
       {/* ========================================================================= */}
       {createdResult && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-surface-container-lowest w-full max-w-lg rounded-3xl border border-outline-variant/40 shadow-2xl p-6 sm:p-8 space-y-6">
-            <div className="text-center space-y-2">
-              <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
-                <span className="material-symbols-outlined text-4xl">check_circle</span>
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setCreatedResult(null); }}
+        >
+          <div 
+            className="bg-surface-container-lowest w-full max-w-lg max-h-[90vh] flex flex-col rounded-3xl border border-outline-variant/40 shadow-2xl overflow-hidden animate-scaleUp text-on-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="overflow-y-auto p-6 sm:p-8 space-y-6">
+              <div className="text-center space-y-2">
+                <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                  <span className="material-symbols-outlined text-4xl">check_circle</span>
+                </div>
+                <h3 className="font-headline text-xl sm:text-2xl font-bold text-on-surface">
+                  Payment Link Ready!
+                </h3>
+                <p className="text-xs sm:text-sm text-outline">
+                  Your live Razorpay payment link for <strong className="text-on-surface">{createdResult.customer_name}</strong> has been generated.
+                </p>
               </div>
-              <h3 className="font-headline text-xl sm:text-2xl font-bold text-on-surface">
-                Payment Link Ready!
-              </h3>
-              <p className="text-xs sm:text-sm text-outline">
-                Your live Razorpay payment link for <strong className="text-on-surface">{createdResult.customer_name}</strong> has been generated.
-              </p>
-            </div>
 
-            {/* Payment Summary Box */}
-            <div className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/30 space-y-2">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-outline">Reference:</span>
-                <span className="font-mono font-bold text-on-surface">{createdResult.reference_id}</span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-outline">Payable Amount:</span>
-                <span className="font-headline font-bold text-base text-primary">
-                  {formatCurrency(createdResult.amount, createdResult.currency)}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-outline">Description:</span>
-                <span className="font-medium text-on-surface text-right truncate max-w-[240px]">
-                  {createdResult.description || 'Visa Processing'}
-                </span>
-              </div>
-            </div>
-
-            {/* URL Box with 1-Click Copy */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-on-surface">Payment URL</label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={createdResult.short_url}
-                  className="flex-1 px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/40 text-xs sm:text-sm font-mono text-primary select-all focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => handleCopyLink(createdResult.short_url, 'success_modal')}
-                  className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-container transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
-                >
-                  <span className="material-symbols-outlined text-sm">
-                    {copiedId === 'success_modal' ? 'check' : 'content_copy'}
+              {/* Payment Summary Box */}
+              <div className="bg-surface-container-low p-4 rounded-2xl border border-outline-variant/30 space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-outline">Reference:</span>
+                  <span className="font-mono font-bold text-on-surface">{createdResult.reference_id}</span>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-outline">Payable Amount:</span>
+                  <span className="font-headline font-bold text-base text-primary">
+                    {formatCurrency(createdResult.amount, createdResult.currency)}
                   </span>
-                  <span>{copiedId === 'success_modal' ? 'Copied!' : 'Copy'}</span>
-                </button>
+                </div>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-outline">Description:</span>
+                  <span className="font-medium text-on-surface text-right truncate max-w-[240px]">
+                    {createdResult.description || 'Visa Processing'}
+                  </span>
+                </div>
               </div>
-            </div>
 
-            {/* Direct Quick Share Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <a
-                href={createdResult.short_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container text-on-surface text-xs font-bold transition-all"
+              {/* URL Box with 1-Click Copy */}
+              <div className="space-y-1.5">
+                <label className="block text-xs font-bold text-on-surface">Payment URL</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={createdResult.short_url}
+                    className="flex-1 px-3.5 py-2.5 bg-surface-container-lowest rounded-xl border border-outline-variant/40 text-xs sm:text-sm font-mono text-primary select-all focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleCopyLink(createdResult.short_url, 'success_modal')}
+                    className="px-4 py-2.5 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-container transition-all flex items-center gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-sm">
+                      {copiedId === 'success_modal' ? 'check' : 'content_copy'}
+                    </span>
+                    <span>{copiedId === 'success_modal' ? 'Copied!' : 'Copy'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Direct Quick Share Actions */}
+              <div className="grid grid-cols-2 gap-3">
+                <a
+                  href={createdResult.short_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl border border-outline-variant/40 bg-surface-container-low hover:bg-surface-container text-on-surface text-xs font-bold transition-all"
+                >
+                  <span className="material-symbols-outlined text-base">open_in_new</span>
+                  <span>Open Checkout</span>
+                </a>
+
+                <a
+                  href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
+                    `Hello ${createdResult.customer_name}, please find your official Zoltan Visa payment link for ${formatCurrency(createdResult.amount, createdResult.currency)}: ${createdResult.short_url}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs"
+                >
+                  <span className="material-symbols-outlined text-base">chat</span>
+                  <span>Share via WhatsApp</span>
+                </a>
+              </div>
+
+              {/* Dismiss Button */}
+              <button
+                type="button"
+                onClick={() => setCreatedResult(null)}
+                className="w-full py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-bold transition-all cursor-pointer"
               >
-                <span className="material-symbols-outlined text-base">open_in_new</span>
-                <span>Open Checkout</span>
-              </a>
-
-              <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(
-                  `Hello ${createdResult.customer_name}, please find your official Zoltan Visa payment link for ${formatCurrency(createdResult.amount, createdResult.currency)}: ${createdResult.short_url}`
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-all shadow-xs"
-              >
-                <span className="material-symbols-outlined text-base">chat</span>
-                <span>Share via WhatsApp</span>
-              </a>
+                Done / Return to Dashboard
+              </button>
             </div>
-
-            {/* Dismiss Button */}
-            <button
-              type="button"
-              onClick={() => setCreatedResult(null)}
-              className="w-full py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-container-highest text-on-surface text-xs font-bold transition-all cursor-pointer"
-            >
-              Done / Return to Dashboard
-            </button>
           </div>
         </div>
       )}
@@ -1016,11 +1053,17 @@ const PaymentLinksTab = ({ showNotification }) => {
       {/* RESEND EMAIL MODAL                                                       */}
       {/* ========================================================================= */}
       {emailModalLink && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-surface-container-lowest w-full max-w-md rounded-3xl border border-outline-variant/40 shadow-2xl p-6 space-y-4">
-            <div className="flex items-center justify-between">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/70 backdrop-blur-sm animate-fadeIn"
+          onClick={(e) => { if (e.target === e.currentTarget) setEmailModalLink(null); }}
+        >
+          <div 
+            className="bg-surface-container-lowest w-full max-w-md max-h-[90vh] flex flex-col rounded-3xl border border-outline-variant/40 shadow-2xl overflow-hidden p-6 space-y-4 animate-scaleUp text-on-surface"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                <div className="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
                   <span className="material-symbols-outlined text-xl">send</span>
                 </div>
                 <h3 className="font-headline font-bold text-on-surface text-base">
@@ -1030,7 +1073,7 @@ const PaymentLinksTab = ({ showNotification }) => {
               <button
                 type="button"
                 onClick={() => setEmailModalLink(null)}
-                className="p-1 rounded-lg text-outline hover:bg-surface-container-high transition-colors"
+                className="p-1 rounded-lg text-outline hover:bg-surface-container-high transition-colors cursor-pointer"
               >
                 <span className="material-symbols-outlined text-lg">close</span>
               </button>
@@ -1063,14 +1106,14 @@ const PaymentLinksTab = ({ showNotification }) => {
                 <button
                   type="button"
                   onClick={() => setEmailModalLink(null)}
-                  className="px-4 py-2 rounded-xl border border-outline-variant/30 text-xs font-bold hover:bg-surface-container-low"
+                  className="px-4 py-2 rounded-xl border border-outline-variant/30 text-xs font-bold hover:bg-surface-container-low cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={sendingEmail}
-                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-container shadow-xs transition-all disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-container shadow-xs transition-all disabled:opacity-50 cursor-pointer"
                 >
                   {sendingEmail ? (
                     <>
