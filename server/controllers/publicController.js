@@ -320,7 +320,8 @@ const DEFAULT_VISA_REQUIREMENTS = {
   required_documents: defaultRequiredDocs,
   form_schema: {},
   configuration_id: 1,
-  is_default: true
+  is_default: true,
+  appointment_data: null
 };
 
 const normalizeServiceFee = (serviceFee) => {
@@ -423,12 +424,19 @@ const getVisaRequirements = async (req, res) => {
       return res.status(200).json(DEFAULT_VISA_REQUIREMENTS);
     }
 
+    const appData = config.appointment_data || config.form_schema?.appointment_data || null;
+    let appointment_data = null;
+    if (appData && (appData.enabled === true || appData.has_appointment === true)) {
+      appointment_data = appData;
+    }
+
     return res.status(200).json({
       service_fee: normalizeServiceFee(config.service_fee),
       required_documents: normalizeRequiredDocs(config.required_documents),
       form_schema: config.form_schema,
       configuration_id: config.id,
-      is_default: false
+      is_default: false,
+      appointment_data
     });
   } catch (error) {
     console.error('Error fetching visa requirements:', error);

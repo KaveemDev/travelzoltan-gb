@@ -1,8 +1,153 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { visaAPI, trustAPI } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
+
+// Speedometer Gauge Component modeled after the appointment availability meter
+const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
+  const currentDays = Math.min(Math.max(Number(days) || 0, 0), maxDays);
+  const cx = 150;
+  const cy = 135;
+  const rInner = 75;
+  const rOuterMinor = 86;
+  const rOuterMajor = 94;
+  const rLabel = 108;
+  const totalTicks = 90;
+  const startAngle = 210;
+  const sweepAngle = 240;
+
+  // Generate radial tick marks
+  const ticks = [];
+  for (let val = 0; val <= totalTicks; val += 1) {
+    const angle = startAngle - (val / totalTicks) * sweepAngle;
+    const rad = (angle * Math.PI) / 180;
+    const isMajor = val % 10 === 0;
+    const rOuter = isMajor ? rOuterMajor : rOuterMinor;
+    const isFilled = val <= currentDays;
+
+    const x1 = cx + rInner * Math.cos(rad);
+    const y1 = cy - rInner * Math.sin(rad);
+    const x2 = cx + rOuter * Math.cos(rad);
+    const y2 = cy - rOuter * Math.sin(rad);
+
+    ticks.push({
+      val,
+      isMajor,
+      isFilled,
+      x1,
+      y1,
+      x2,
+      y2,
+      labelX: cx + rLabel * Math.cos(rad),
+      labelY: cy - rLabel * Math.sin(rad)
+    });
+  }
+
+  // Pointer needle pointing at currentDays
+  const needleAngle = startAngle - (currentDays / totalTicks) * sweepAngle;
+  const needleRad = (needleAngle * Math.PI) / 180;
+  const needleX = cx + (rInner - 5) * Math.cos(needleRad);
+  const needleY = cy - (rInner - 5) * Math.sin(needleRad);
+  const needleBaseX = cx + 48 * Math.cos(needleRad);
+  const needleBaseY = cy - 48 * Math.sin(needleRad);
+
+  return (
+    <div className="relative w-full max-w-[320px] mx-auto flex flex-col items-center select-none py-1">
+      <svg
+        viewBox="0 0 300 215"
+        className="w-full h-auto overflow-visible"
+        aria-label={`${currentDays} days until nearest available appointment`}
+      >
+        {/* Radial ticks */}
+        {ticks.map((t) => (
+          <g key={t.val}>
+            <line
+              x1={t.x1}
+              y1={t.y1}
+              x2={t.x2}
+              y2={t.y2}
+              stroke={t.isFilled ? '#4f46e5' : '#cbd5e1'}
+              strokeWidth={t.isFilled ? (t.isMajor ? 2.5 : 2) : (t.isMajor ? 1.5 : 1)}
+              strokeLinecap="round"
+            />
+            {t.isMajor && (
+              <text
+                x={t.labelX}
+                y={t.labelY}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fill="#94a3b8"
+                fontSize="10"
+                fontWeight="700"
+                fontFamily="system-ui, sans-serif"
+              >
+                {t.val}
+              </text>
+            )}
+          </g>
+        ))}
+
+        {/* Needle pointer */}
+        <line
+          x1={needleBaseX}
+          y1={needleBaseY}
+          x2={needleX}
+          y2={needleY}
+          stroke="#4f46e5"
+          strokeWidth="3.5"
+          strokeLinecap="round"
+        />
+
+        {/* Center circular disc */}
+        <circle
+          cx={cx}
+          cy={cy}
+          r={62}
+          fill="#ffffff"
+          stroke="#f1f5f9"
+          strokeWidth="2"
+          filter="drop-shadow(0 4px 10px rgba(0,0,0,0.06))"
+        />
+
+        {/* Dial Center text */}
+        <text
+          x={cx}
+          y={cy - 6}
+          textAnchor="middle"
+          fill="#0f172a"
+          fontSize="22"
+          fontWeight="900"
+          fontFamily="system-ui, sans-serif"
+        >
+          {currentDays} Days
+        </text>
+        <text
+          x={cx}
+          y={cy + 12}
+          textAnchor="middle"
+          fill="#64748b"
+          fontSize="8.5"
+          fontWeight="600"
+          fontFamily="system-ui, sans-serif"
+        >
+          until nearest available
+        </text>
+        <text
+          x={cx}
+          y={cy + 23}
+          textAnchor="middle"
+          fill="#64748b"
+          fontSize="8.5"
+          fontWeight="600"
+          fontFamily="system-ui, sans-serif"
+        >
+          appointment
+        </text>
+      </svg>
+    </div>
+  );
+};
 
 const countryCodes = [
   { code: '+44', country: 'UK', flag: '🇬🇧' },
@@ -43,6 +188,8 @@ const ChecklistPage = () => {
   const [appointmentSlots, setAppointmentSlots] = useState([]);
   const [selectedAppointmentDate, setSelectedAppointmentDate] = useState('');
   const [customAppointmentDate, setCustomAppointmentDate] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState('');
+  const [isAppointmentReserved, setIsAppointmentReserved] = useState(false);
 
   // Interactive document preparation checklist tracking
   const [checkedDocs, setCheckedDocs] = useState({});
@@ -134,25 +281,88 @@ const ChecklistPage = () => {
       if (data && data.appointmentSlots && data.appointmentSlots.length > 0) {
         setAppointmentSlots(data.appointmentSlots);
         setSelectedAppointmentDate(data.appointmentSlots[0]?.earliest_date || '');
+        setSelectedLocation(data.appointmentSlots[0]?.consular_city || '');
       } else {
-        // Fallback default slots based on destination
-        const defaultSlots = [
-          { id: 1, consular_city: 'London', center_name: 'TLScontact / VFS London', earliest_date: '14 Oct 2026', appointment_type: 'Express Available', slots_status: 'Available' },
-          { id: 2, consular_city: 'Manchester', center_name: 'VFS Global Manchester', earliest_date: '16 Oct 2026', appointment_type: 'Standard Slot', slots_status: 'Filling Fast (3 left)' }
-        ];
-        setAppointmentSlots(defaultSlots);
-        setSelectedAppointmentDate(defaultSlots[0].earliest_date);
+        // Controlled from backend: if no appointment added to configuration/destination, don't show appointment
+        setAppointmentSlots([]);
       }
     } catch (e) {
       console.warn('[ChecklistPage] Could not load appointment slots:', e);
-      const defaultSlots = [
-        { id: 1, consular_city: 'London', center_name: 'TLScontact / VFS London', earliest_date: '14 Oct 2026', appointment_type: 'Express Available', slots_status: 'Available' },
-        { id: 2, consular_city: 'Manchester', center_name: 'VFS Global Manchester', earliest_date: '16 Oct 2026', appointment_type: 'Standard Slot', slots_status: 'Filling Fast (3 left)' }
-      ];
-      setAppointmentSlots(defaultSlots);
-      setSelectedAppointmentDate(defaultSlots[0].earliest_date);
+      setAppointmentSlots([]);
     }
   };
+
+  // Synchronize appointment configuration from visaData when loaded
+  useEffect(() => {
+    const appCfg = visaData?.appointment_data;
+    if (appCfg && (appCfg.enabled === true || appCfg.has_appointment === true)) {
+      if (!selectedAppointmentDate && appCfg.earliest_date) {
+        setSelectedAppointmentDate(appCfg.earliest_date);
+      }
+      if (!selectedLocation) {
+        setSelectedLocation(appCfg.location || appCfg.centers?.[0]?.city || '');
+      }
+    }
+  }, [visaData, selectedAppointmentDate, selectedLocation]);
+
+  // Determine if appointment is enabled from backend
+  const appointmentConfig = (visaData?.appointment_data && (visaData.appointment_data.enabled === true || visaData.appointment_data.has_appointment === true))
+    ? visaData.appointment_data
+    : null;
+
+  const hasAppointment = Boolean(
+    appointmentConfig || (appointmentSlots && appointmentSlots.length > 0)
+  );
+
+  // Consolidated appointment centers list
+  const availableCenters = useMemo(() => {
+    if (appointmentConfig?.centers && appointmentConfig.centers.length > 0) {
+      return appointmentConfig.centers;
+    }
+    if (appointmentSlots && appointmentSlots.length > 0) {
+      return appointmentSlots.map((s) => ({
+        city: s.consular_city || 'Main Center',
+        center_name: s.center_name || 'Consular Processing Center',
+        earliest_date: s.earliest_date,
+        slots_status: s.slots_status,
+        appointment_type: s.appointment_type,
+        days_until: s.days_until
+      }));
+    }
+    if (appointmentConfig?.earliest_date) {
+      return [{
+        city: appointmentConfig.location || 'Official Center',
+        center_name: 'Consular Processing Office',
+        earliest_date: appointmentConfig.earliest_date,
+        slots_status: appointmentConfig.badge_text || 'Available',
+        days_until: appointmentConfig.days_until
+      }];
+    }
+    return [];
+  }, [appointmentConfig, appointmentSlots]);
+
+  const activeCenter = useMemo(() => {
+    if (availableCenters.length === 0) return null;
+    if (selectedLocation) {
+      const found = availableCenters.find((c) => (c.city || '').toLowerCase() === selectedLocation.toLowerCase());
+      if (found) return found;
+    }
+    return availableCenters[0];
+  }, [availableCenters, selectedLocation]);
+
+  const earliestDate = activeCenter?.earliest_date || appointmentConfig?.earliest_date || selectedAppointmentDate || 'Earliest available';
+  const badgeText = activeCenter?.slots_status || appointmentConfig?.badge_text || (availableCenters.length > 0 ? `${availableCenters.length} slots available for ${earliestDate}!` : '');
+  const daysUntil = Number(activeCenter?.days_until ?? appointmentConfig?.days_until ?? 12) || 12;
+
+  const earlierCountries = useMemo(() => {
+    if (appointmentConfig?.earlier_countries && appointmentConfig.earlier_countries.length > 0) {
+      return appointmentConfig.earlier_countries;
+    }
+    if (appointmentSlots?.[0]?.earlier_countries && appointmentSlots[0].earlier_countries.length > 0) {
+      return appointmentSlots[0].earlier_countries;
+    }
+    return ['Austria', 'Switzerland', 'Germany', 'Finland', 'France', 'Croatia', 'Iceland', 'Netherlands', 'Portugal', 'Sweden'];
+  }, [appointmentConfig, appointmentSlots]);
 
   const handleApplyNewRoute = (e) => {
     e.preventDefault();
@@ -163,7 +373,7 @@ const ChecklistPage = () => {
     }
   };
 
-  const finalChosenAppointmentDate = customAppointmentDate || selectedAppointmentDate;
+  const finalChosenAppointmentDate = customAppointmentDate || selectedAppointmentDate || (hasAppointment ? earliestDate : '');
 
   const handleStartApplication = () => {
     const params = new URLSearchParams({
@@ -381,74 +591,131 @@ const ChecklistPage = () => {
           </div>
         </div>
 
-        {/* Available Appointment Dates Card */}
-        <div className="bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 text-white rounded-3xl p-6 sm:p-7 border border-slate-800 shadow-xl mb-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-80 h-80 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-
-          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-            <div className="space-y-2 max-w-xl">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  Live Consular Appointment Availability
-                </span>
+        {/* Available Appointment Card - Controlled from backend (only shown if configured) */}
+        {hasAppointment && (
+          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm mb-6 max-w-3xl mx-auto transition-all">
+            {/* Top Urgency / Slots Available Badge */}
+            <div className="flex items-center justify-start mb-4">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>{badgeText || `Available slots for ${earliestDate}!`}</span>
               </div>
-              <h2 className="font-headline text-xl sm:text-2xl font-bold text-white">
-                Earliest Appointment Dates for {destination}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
-                We monitor official consular portals (TLScontact, VFS Global, BLS, and Embassies) every 15 minutes to secure priority slots.
-              </p>
             </div>
 
-            {/* Quick Slots Badges & Preferred Date Selector */}
-            <div className="bg-white/5 backdrop-blur-md p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-start sm:items-center gap-4 shrink-0">
-              <div>
-                <p className="text-[11px] uppercase font-bold text-slate-400 tracking-wider mb-1.5">
-                  Earliest Available Center Slots:
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {appointmentSlots.map((slot) => {
-                    const isSelected = selectedAppointmentDate === slot.earliest_date;
-                    return (
-                      <button
-                        key={slot.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedAppointmentDate(slot.earliest_date);
-                          setCustomAppointmentDate('');
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-primary text-white shadow-md ring-2 ring-primary/40'
-                            : 'bg-white/10 hover:bg-white/20 text-slate-200 border border-white/15'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-sm">event</span>
-                        <span>{slot.consular_city}: {slot.earliest_date}</span>
-                        {isSelected && <span className="material-symbols-outlined text-xs">check</span>}
-                      </button>
-                    );
-                  })}
+            {/* Headline */}
+            <h3 className="font-headline text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-5 leading-tight">
+              Visa Appointment as Early as{' '}
+              <span className="text-primary font-black">{earliestDate}</span>
+            </h3>
+
+            {/* Appointment Location Dropdown */}
+            <div className="space-y-1.5 mb-4">
+              <label className="block text-xs font-bold text-slate-700">
+                Appointment Location
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-primary">
+                  <span className="material-symbols-outlined text-xl">location_on</span>
+                </div>
+                <select
+                  value={selectedLocation || (availableCenters[0]?.city || '')}
+                  onChange={(e) => {
+                    const loc = e.target.value;
+                    setSelectedLocation(loc);
+                    const found = availableCenters.find((c) => (c.city || '').toLowerCase() === loc.toLowerCase());
+                    if (found && found.earliest_date) {
+                      setSelectedAppointmentDate(found.earliest_date);
+                    }
+                  }}
+                  className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-200 text-slate-900 text-sm font-bold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-2xs"
+                >
+                  {availableCenters.map((center, idx) => (
+                    <option key={idx} value={center.city}>
+                      {center.city} {center.center_name ? `(${center.center_name})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                  <span className="material-symbols-outlined text-lg">expand_more</span>
                 </div>
               </div>
+            </div>
 
-              {/* Custom Date Window Picker */}
-              <div className="sm:border-l sm:border-white/10 sm:pl-4">
-                <p className="text-[11px] uppercase font-bold text-slate-400 tracking-wider mb-1">
-                  Or Target Travel Date:
+            {/* Reserve Appointment CTA Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setIsAppointmentReserved(true);
+                if (!selectedAppointmentDate && earliestDate) {
+                  setSelectedAppointmentDate(earliestDate);
+                }
+              }}
+              className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md mb-6 ${
+                isAppointmentReserved
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25 ring-2 ring-emerald-600/30'
+                  : 'bg-primary hover:bg-primary-dark text-white shadow-primary/25 active:scale-[0.99]'
+              }`}
+            >
+              <span className="material-symbols-outlined text-lg">
+                {isAppointmentReserved ? 'check_circle' : 'event_available'}
+              </span>
+              <span>
+                {isAppointmentReserved
+                  ? `Appointment Reserved for ${earliestDate}`
+                  : 'Reserve Appointment Now'}
+              </span>
+            </button>
+
+            {/* Speedometer Gauge Dial Meter */}
+            <div className="py-2">
+              <AppointmentSpeedometer days={daysUntil} maxDays={90} />
+            </div>
+
+            {/* Earlier Appointments Available in other countries */}
+            {earlierCountries && earlierCountries.length > 0 && (
+              <div className="mt-6 pt-5 border-t border-slate-100 space-y-3 text-center">
+                <p className="text-xs sm:text-sm font-bold text-slate-800">
+                  Earlier appointments available for these countries from {selectedLocation || destination}
                 </p>
-                <input
-                  type="date"
-                  min={new Date().toISOString().split('T')[0]}
-                  value={customAppointmentDate}
-                  onChange={(e) => setCustomAppointmentDate(e.target.value)}
-                  className="bg-white/10 hover:bg-white/15 text-white text-xs font-medium px-3 py-1.5 rounded-xl border border-white/20 outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                />
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {earlierCountries.map((country, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => {
+                        setTempDestination(country);
+                        setDestination(country);
+                      }}
+                      className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold border border-slate-200/60 transition-all cursor-pointer"
+                    >
+                      {country}
+                    </button>
+                  ))}
+                </div>
               </div>
+            )}
+
+            {/* Optional Custom Target Travel Date Accordion */}
+            <div className="mt-4 pt-3 text-center">
+              <details className="group inline-block text-left">
+                <summary className="text-[11px] font-bold text-primary hover:underline cursor-pointer list-none flex items-center justify-center gap-1">
+                  <span>Need a different target travel date?</span>
+                  <span className="material-symbols-outlined text-xs group-open:rotate-180 transition-transform">expand_more</span>
+                </summary>
+                <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-3">
+                  <label className="text-xs text-slate-600 font-medium">Target Date:</label>
+                  <input
+                    type="date"
+                    min={new Date().toISOString().split('T')[0]}
+                    value={customAppointmentDate}
+                    onChange={(e) => setCustomAppointmentDate(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white"
+                  />
+                </div>
+              </details>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Simplified Filter Bar: Applicant Status & Travel Purpose */}
         <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs mb-6">

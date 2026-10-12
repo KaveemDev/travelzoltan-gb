@@ -38,6 +38,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
       defaultValue: {} // Dynamic form fields required
     },
+    appointment_data: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: null // Custom appointment settings per route
+    },
     sort_order: {
       type: DataTypes.INTEGER,
       allowNull: false,

@@ -133,12 +133,67 @@ const getPublicAppointmentSlots = async (req, res) => {
     }
 
     if (destination) {
-      const destLower = destination.toLowerCase();
-      slots = slots.filter(s => 
-        s.destination.toLowerCase().includes(destLower) || 
-        destLower.includes(s.destination.toLowerCase()) ||
-        s.destination.toLowerCase().includes('schengen')
-      );
+      const destLower = destination.toLowerCase().trim();
+      const schengenCountries = [
+        'schengen', 'france', 'spain', 'italy', 'germany', 'switzerland', 'austria',
+        'netherlands', 'portugal', 'greece', 'denmark', 'sweden', 'norway', 'finland',
+        'iceland', 'belgium', 'poland', 'czech', 'hungary', 'estonia', 'latvia', 'lithuania'
+      ];
+      const isSchengenDest = schengenCountries.some(c => destLower.includes(c));
+
+      slots = slots.filter(s => {
+        const slotDest = (s.destination || '').toLowerCase().trim();
+        const isSchengenSlot = slotDest.includes('schengen');
+        if (slotDest === destLower) return true;
+        if (slotDest.includes(destLower) || destLower.includes(slotDest)) return true;
+        // Only cross-match if both requested destination and slot are Schengen
+        if (isSchengenDest && isSchengenSlot) return true;
+        return false;
+      });
+
+      // Also check if VisaConfiguration for this destination has custom appointment_data configured
+      try {
+        const { VisaConfiguration } = require('../models');
+        if (VisaConfiguration) {
+          const matchingConfigs = await VisaConfiguration.findAll({
+            where: { destination: destination.trim() }
+          });
+          for (const cfg of matchingConfigs) {
+            const appData = cfg.appointment_data || cfg.form_schema?.appointment_data;
+            if (appData && (appData.enabled === true || appData.has_appointment === true)) {
+              if (Array.isArray(appData.centers) && appData.centers.length > 0) {
+                appData.centers.forEach((c, idx) => {
+                  slots.push({
+                    id: `cfg-${cfg.id}-${idx}`,
+                    destination: cfg.destination,
+                    consular_city: c.city || appData.location || 'Main Center',
+                    center_name: c.center_name || c.center || 'Official Visa Center',
+                    earliest_date: c.earliest_date || appData.earliest_date || 'Earliest Available',
+                    appointment_type: c.appointment_type || 'Standard',
+                    slots_status: c.slots_status || appData.badge_text || 'Available',
+                    days_until: c.days_until || appData.days_until,
+                    earlier_countries: appData.earlier_countries || []
+                  });
+                });
+              } else if (appData.earliest_date) {
+                slots.push({
+                  id: `cfg-${cfg.id}`,
+                  destination: cfg.destination,
+                  consular_city: appData.location || 'Main Center',
+                  center_name: 'Official Visa Center',
+                  earliest_date: appData.earliest_date,
+                  appointment_type: 'Standard',
+                  slots_status: appData.badge_text || 'Available',
+                  days_until: appData.days_until,
+                  earlier_countries: appData.earlier_countries || []
+                });
+              }
+            }
+          }
+        }
+      } catch (cfgErr) {
+        console.warn('[getPublicAppointmentSlots] Error querying config appointment_data:', cfgErr.message);
+      }
     }
 
     return res.status(200).json({
@@ -147,10 +202,9 @@ const getPublicAppointmentSlots = async (req, res) => {
     });
   } catch (error) {
     console.error('[getPublicAppointmentSlots] Error:', error);
-    const fallback = readFallbackData();
     return res.status(200).json({
       success: true,
-      appointmentSlots: fallback.appointmentSlots || []
+      appointmentSlots: []
     });
   }
 };

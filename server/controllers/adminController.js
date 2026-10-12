@@ -416,7 +416,8 @@ const getAllConfigurations = async (req, res) => {
       const plain = c.toJSON ? c.toJSON() : c;
       return {
         ...plain,
-        service_fee: normalizeServiceFee(plain.service_fee)
+        service_fee: normalizeServiceFee(plain.service_fee),
+        appointment_data: plain.appointment_data || plain.form_schema?.appointment_data || null
       };
     });
     return res.status(200).json(normalized);
@@ -429,7 +430,7 @@ const getAllConfigurations = async (req, res) => {
 // POST /api/admin/configurations
 const createConfiguration = async (req, res) => {
   try {
-    const { citizenship, destination, service_fee, required_documents, form_schema } = req.body;
+    const { citizenship, destination, service_fee, required_documents, form_schema, appointment_data } = req.body;
 
     const trimmedCitizenship = citizenship ? citizenship.trim() : '';
     const trimmedDestination = destination ? destination.trim() : '';
@@ -443,13 +444,18 @@ const createConfiguration = async (req, res) => {
     }
 
     const normalizedFee = normalizeServiceFee(service_fee);
+    const enrichedFormSchema = {
+      ...(form_schema || {}),
+      appointment_data: appointment_data || null
+    };
 
     const config = await VisaConfiguration.create({
       citizenship: trimmedCitizenship,
       destination: trimmedDestination,
       service_fee: normalizedFee,
       required_documents,
-      form_schema
+      form_schema: enrichedFormSchema,
+      appointment_data: appointment_data || null
     });
 
     return res.status(201).json({ message: 'Configuration created successfully', configuration: config });
@@ -463,7 +469,7 @@ const createConfiguration = async (req, res) => {
 const updateConfiguration = async (req, res) => {
   try {
     const { id } = req.params;
-    const { citizenship, destination, service_fee, required_documents, form_schema, sort_order } = req.body;
+    const { citizenship, destination, service_fee, required_documents, form_schema, appointment_data, sort_order } = req.body;
 
     const configuration = await VisaConfiguration.findByPk(id);
 
@@ -488,6 +494,16 @@ const updateConfiguration = async (req, res) => {
     }
     if (form_schema !== undefined) {
       configuration.form_schema = form_schema;
+      configuration.changed('form_schema', true);
+    }
+    if (appointment_data !== undefined) {
+      configuration.appointment_data = appointment_data;
+      configuration.changed('appointment_data', true);
+      const currentSchema = configuration.form_schema || {};
+      configuration.form_schema = {
+        ...currentSchema,
+        appointment_data: appointment_data
+      };
       configuration.changed('form_schema', true);
     }
     if (sort_order !== undefined) {

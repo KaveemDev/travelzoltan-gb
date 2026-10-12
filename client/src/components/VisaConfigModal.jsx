@@ -60,6 +60,8 @@ const VisaConfigModal = ({
   const [activeDocsCategory, setActiveDocsCategory] = useState('now');
   const [newDoc, setNewDoc] = useState({ name: '', description: '', icon: 'description', type: 'text' });
   const [iconPickerOpen, setIconPickerOpen] = useState(false);
+  const [newCenter, setNewCenter] = useState({ city: '', center_name: '', earliest_date: '', slots_status: 'Available' });
+  const [newEarlierCountry, setNewEarlierCountry] = useState('');
   const bodyRef = useRef(null);
 
   // Reset tab and scroll on open
@@ -295,6 +297,12 @@ const VisaConfigModal = ({
                 label: 'Required Documents', 
                 icon: 'folder_managed', 
                 badge: totalDocsOverall > 0 ? `${totalDocsOverall} items` : null 
+              },
+              { 
+                id: 'appointment', 
+                label: 'Appointment Availability', 
+                icon: 'calendar_month', 
+                badge: configForm.appointment_data?.enabled ? 'Active' : 'Off' 
               }
             ].map((tab) => {
               const isActive = activeTab === tab.id;
@@ -1091,6 +1099,401 @@ const VisaConfigModal = ({
                 )}
               </div>
 
+            </div>
+          )}
+
+          {/* TAB 5: APPOINTMENT AVAILABILITY */}
+          {activeTab === 'appointment' && (
+            <div className="space-y-6 max-w-4xl mx-auto py-2">
+              {/* Header & Master Toggle Card */}
+              <div className="p-5 rounded-2xl bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-primary/10 border border-blue-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-xl">event_available</span>
+                    <h3 className="font-headline font-bold text-base text-on-surface">
+                      Live Consular Appointment Availability
+                    </h3>
+                  </div>
+                  <p className="text-xs text-outline leading-relaxed max-w-xl">
+                    Control whether an appointment booking card appears on the public checklist page for this visa route ({configForm.citizenship || 'Citizenship'} ➔ {configForm.destination || 'Destination'}). If disabled, no appointment section is shown to users.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-3 shrink-0 self-start sm:self-center bg-surface-container-lowest/80 px-4 py-2.5 rounded-2xl border border-outline-variant/30">
+                  <span className="text-xs font-bold text-on-surface">
+                    {configForm.appointment_data?.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                  <ToggleSwitch
+                    id="toggle-appointment-enabled"
+                    label="Toggle live appointment availability"
+                    checked={!!configForm.appointment_data?.enabled}
+                    onChange={(checked) => {
+                      setConfigForm(prev => ({
+                        ...prev,
+                        appointment_data: {
+                          ...(prev.appointment_data || {}),
+                          enabled: checked,
+                          earliest_date: prev.appointment_data?.earliest_date || '15th Oct 2026',
+                          days_until: prev.appointment_data?.days_until !== undefined && prev.appointment_data?.days_until !== '' ? prev.appointment_data?.days_until : 12,
+                          badge_text: prev.appointment_data?.badge_text || '3 slots left for 15th Oct!',
+                          location: prev.appointment_data?.location || 'Hyderabad',
+                          centers: prev.appointment_data?.centers && prev.appointment_data.centers.length > 0 ? prev.appointment_data.centers : [
+                            { city: 'Hyderabad', center_name: 'VFS Global Hyderabad', earliest_date: '15th Oct 2026', slots_status: '3 slots left' },
+                            { city: 'London', center_name: 'TLScontact / VFS London', earliest_date: '18th Oct 2026', slots_status: 'Available' }
+                          ],
+                          earlier_countries: prev.appointment_data?.earlier_countries && prev.appointment_data.earlier_countries.length > 0 ? prev.appointment_data.earlier_countries : [
+                            'Austria', 'Switzerland', 'Germany', 'Finland', 'France', 'Croatia', 'Iceland', 'Netherlands', 'Portugal', 'Sweden'
+                          ]
+                        }
+                      }));
+                    }}
+                  />
+                </div>
+              </div>
+
+              {configForm.appointment_data?.enabled ? (
+                <div className="space-y-6">
+                  {/* General Appointment Slot Attributes */}
+                  <div className="p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs space-y-4">
+                    <h4 className="font-headline font-bold text-sm text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-base">tune</span>
+                      Primary Appointment Metrics
+                    </h4>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {/* Earliest Date */}
+                      <div>
+                        <label className="block text-xs font-bold text-outline mb-1.5">
+                          Earliest Appointment Date *
+                        </label>
+                        <input
+                          type="text"
+                          value={configForm.appointment_data?.earliest_date || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setConfigForm(prev => ({
+                              ...prev,
+                              appointment_data: {
+                                ...(prev.appointment_data || {}),
+                                earliest_date: val
+                              }
+                            }));
+                          }}
+                          placeholder="e.g. 15th Oct 2026"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-xs font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+
+                      {/* Days Until Gauge */}
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-bold text-outline">
+                            Days Until Appointment
+                          </label>
+                          <span className="text-[10px] text-primary font-bold">Speedometer Value</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          max="90"
+                          value={configForm.appointment_data?.days_until ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value === '' ? '' : parseInt(e.target.value, 10);
+                            setConfigForm(prev => ({
+                              ...prev,
+                              appointment_data: {
+                                ...(prev.appointment_data || {}),
+                                days_until: val
+                              }
+                            }));
+                          }}
+                          placeholder="e.g. 12"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-xs font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+
+                      {/* Top Urgency Banner Badge */}
+                      <div>
+                        <label className="block text-xs font-bold text-outline mb-1.5">
+                          Top Alert Pill Text
+                        </label>
+                        <input
+                          type="text"
+                          value={configForm.appointment_data?.badge_text || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setConfigForm(prev => ({
+                              ...prev,
+                              appointment_data: {
+                                ...(prev.appointment_data || {}),
+                                badge_text: val
+                              }
+                            }));
+                          }}
+                          placeholder="e.g. 3 slots left for 15th Oct!"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-xs font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+
+                      {/* Primary Consular City */}
+                      <div>
+                        <label className="block text-xs font-bold text-outline mb-1.5">
+                          Default City / Location
+                        </label>
+                        <input
+                          type="text"
+                          value={configForm.appointment_data?.location || ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setConfigForm(prev => ({
+                              ...prev,
+                              appointment_data: {
+                                ...(prev.appointment_data || {}),
+                                location: val
+                              }
+                            }));
+                          }}
+                          placeholder="e.g. Hyderabad"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-surface-container-low border border-outline-variant/30 text-xs font-semibold text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/30"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Consular Centers / Available Slots Table */}
+                  <div className="p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="font-headline font-bold text-sm text-on-surface flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-base">location_city</span>
+                          Consular Booking Centers ({configForm.appointment_data?.centers?.length || 0})
+                        </h4>
+                        <p className="text-[11px] text-outline">
+                          Centers shown in the appointment location dropdown on the checklist page.
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Centers List */}
+                    <div className="divide-y divide-surface-container-low rounded-xl border border-outline-variant/20 overflow-hidden bg-surface-container-low/20">
+                      {(configForm.appointment_data?.centers || []).map((ctr, idx) => (
+                        <div key={idx} className="p-3 sm:px-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface-container-lowest/60 hover:bg-surface-container-low/40 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <span className="w-7 h-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                              <span className="material-symbols-outlined text-sm">location_on</span>
+                            </span>
+                            <div>
+                              <p className="text-xs font-bold text-on-surface">
+                                {ctr.city} <span className="text-outline font-normal">({ctr.center_name || 'Visa Center'})</span>
+                              </p>
+                              <p className="text-[11px] text-outline">
+                                Earliest: <span className="font-semibold text-primary">{ctr.earliest_date}</span>
+                                {ctr.slots_status && <> • <span className="text-emerald-600 font-medium">{ctr.slots_status}</span></>}
+                              </p>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfigForm(prev => ({
+                                ...prev,
+                                appointment_data: {
+                                  ...(prev.appointment_data || {}),
+                                  centers: (prev.appointment_data?.centers || []).filter((_, i) => i !== idx)
+                                }
+                              }));
+                            }}
+                            className="self-end sm:self-center text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-lg transition-colors cursor-pointer"
+                            title="Remove Center"
+                          >
+                            <span className="material-symbols-outlined text-sm">delete</span>
+                          </button>
+                        </div>
+                      ))}
+
+                      {(!configForm.appointment_data?.centers || configForm.appointment_data.centers.length === 0) && (
+                        <div className="p-4 text-center text-xs text-outline">
+                          No specific centers added. The default city above will be used.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Add Center Form Row */}
+                    <div className="bg-surface-container-low/40 p-3.5 rounded-xl border border-outline-variant/30 space-y-3">
+                      <p className="text-xs font-bold text-on-surface flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-xs text-primary">add_circle</span>
+                        Add New Consular Center
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                        <input
+                          type="text"
+                          placeholder="City (e.g. Hyderabad)"
+                          value={newCenter.city}
+                          onChange={(e) => setNewCenter({ ...newCenter, city: e.target.value })}
+                          className="px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Center (e.g. VFS Global)"
+                          value={newCenter.center_name}
+                          onChange={(e) => setNewCenter({ ...newCenter, center_name: e.target.value })}
+                          className="px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Date (e.g. 15th Oct 2026)"
+                          value={newCenter.earliest_date}
+                          onChange={(e) => setNewCenter({ ...newCenter, earliest_date: e.target.value })}
+                          className="px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium"
+                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Status (e.g. 3 slots left)"
+                            value={newCenter.slots_status}
+                            onChange={(e) => setNewCenter({ ...newCenter, slots_status: e.target.value })}
+                            className="flex-1 px-3 py-2 rounded-lg bg-surface-container-lowest border border-outline-variant/30 text-xs font-medium"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!newCenter.city.trim() || !newCenter.earliest_date.trim()) return;
+                              setConfigForm(prev => ({
+                                ...prev,
+                                appointment_data: {
+                                  ...(prev.appointment_data || {}),
+                                  centers: [...(prev.appointment_data?.centers || []), { ...newCenter }]
+                                }
+                              }));
+                              setNewCenter({ city: '', center_name: '', earliest_date: '', slots_status: 'Available' });
+                            }}
+                            className="px-3 py-2 rounded-lg bg-primary text-white text-xs font-bold hover:bg-primary-dark transition-all cursor-pointer shrink-0"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Earlier Countries Available */}
+                  <div className="p-5 rounded-2xl bg-surface-container-lowest border border-outline-variant/30 shadow-xs space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <h4 className="font-headline font-bold text-sm text-on-surface flex items-center gap-2">
+                          <span className="material-symbols-outlined text-primary text-base">public</span>
+                          Alternative Countries with Earlier Appointments
+                        </h4>
+                        <p className="text-[11px] text-outline">
+                          Displayed at the bottom of the dial meter to show nearby destinations with earlier appointment availability.
+                        </p>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const schengen = ['Austria', 'Switzerland', 'Germany', 'Finland', 'France', 'Croatia', 'Iceland', 'Netherlands', 'Portugal', 'Sweden'];
+                          setConfigForm(prev => ({
+                            ...prev,
+                            appointment_data: {
+                              ...(prev.appointment_data || {}),
+                              earlier_countries: Array.from(new Set([...(prev.appointment_data?.earlier_countries || []), ...schengen]))
+                            }
+                          }));
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold border border-blue-200 transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+                      >
+                        <span className="material-symbols-outlined text-xs">auto_awesome</span>
+                        Pre-fill Schengen List
+                      </button>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 min-h-10 p-3 rounded-xl bg-surface-container-low/40 border border-outline-variant/20">
+                      {(configForm.appointment_data?.earlier_countries || []).map((country, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-surface-container-lowest border border-outline-variant/40 text-xs font-semibold text-on-surface shadow-2xs"
+                        >
+                          {country}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setConfigForm(prev => ({
+                                ...prev,
+                                appointment_data: {
+                                  ...(prev.appointment_data || {}),
+                                  earlier_countries: (prev.appointment_data?.earlier_countries || []).filter((_, i) => i !== idx)
+                                }
+                              }));
+                            }}
+                            className="hover:text-red-600 transition-colors cursor-pointer text-outline"
+                          >
+                            <span className="material-symbols-outlined text-xs">close</span>
+                          </button>
+                        </span>
+                      ))}
+
+                      {(!configForm.appointment_data?.earlier_countries || configForm.appointment_data.earlier_countries.length === 0) && (
+                        <span className="text-xs text-outline/60 italic py-1">
+                          No alternative countries added. Click the button above to pre-fill or add manually.
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2 max-w-md">
+                      <input
+                        type="text"
+                        placeholder="Add country (e.g. Spain, Greece)"
+                        value={newEarlierCountry}
+                        onChange={(e) => setNewEarlierCountry(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (!newEarlierCountry.trim()) return;
+                            setConfigForm(prev => ({
+                              ...prev,
+                              appointment_data: {
+                                ...(prev.appointment_data || {}),
+                                earlier_countries: [...(prev.appointment_data?.earlier_countries || []), newEarlierCountry.trim()]
+                              }
+                            }));
+                            setNewEarlierCountry('');
+                          }
+                        }}
+                        className="flex-1 px-3.5 py-2 rounded-xl bg-surface-container-low border border-outline-variant/30 text-xs font-medium"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!newEarlierCountry.trim()) return;
+                          setConfigForm(prev => ({
+                            ...prev,
+                            appointment_data: {
+                              ...(prev.appointment_data || {}),
+                              earlier_countries: [...(prev.appointment_data?.earlier_countries || []), newEarlierCountry.trim()]
+                            }
+                          }));
+                          setNewEarlierCountry('');
+                        }}
+                        className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary-dark transition-colors cursor-pointer"
+                      >
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-8 text-center rounded-2xl bg-surface-container-low/40 border border-dashed border-outline-variant/40 space-y-2">
+                  <span className="material-symbols-outlined text-outline/60 text-3xl">event_busy</span>
+                  <p className="text-xs font-semibold text-outline">
+                    Appointment availability is currently disabled for this route.
+                  </p>
+                  <p className="text-[11px] text-outline/70">
+                    Turn on the switch above to configure earliest dates, consular centers, and show the live appointment meter on the checklist page.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 

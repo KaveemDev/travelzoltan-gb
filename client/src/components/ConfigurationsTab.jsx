@@ -219,6 +219,29 @@ const normalizeFormSchema = (form_schema) => {
   return result;
 };
 
+export const normalizeAppointmentData = (data) => {
+  if (!data || typeof data !== 'object') {
+    return {
+      enabled: false,
+      earliest_date: '',
+      days_until: '',
+      badge_text: '',
+      location: '',
+      centers: [],
+      earlier_countries: []
+    };
+  }
+  return {
+    enabled: data.enabled === true || data.has_appointment === true,
+    earliest_date: data.earliest_date || '',
+    days_until: data.days_until !== undefined && data.days_until !== null ? data.days_until : '',
+    badge_text: data.badge_text || '',
+    location: data.location || '',
+    centers: Array.isArray(data.centers) ? data.centers : [],
+    earlier_countries: Array.isArray(data.earlier_countries) ? data.earlier_countries : []
+  };
+};
+
 const ConfigurationsTab = ({ showNotification }) => {
   const [configs, setConfigs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -232,7 +255,8 @@ const ConfigurationsTab = ({ showNotification }) => {
     destination: '',
     service_fee: { pay_now_amount: 0, total_amount: 0, pay_in_full_amount: 0 },
     required_documents: JSON.parse(JSON.stringify(defaultRequiredDocs)),
-    form_schema: normalizeFormSchema(null)
+    form_schema: normalizeFormSchema(null),
+    appointment_data: normalizeAppointmentData(null)
   });
 
   const [dragIndex, setDragIndex] = useState(null);
@@ -310,7 +334,8 @@ const ConfigurationsTab = ({ showNotification }) => {
       destination: config.destination,
       service_fee: feeData,
       required_documents: normalizeRequiredDocs(config.required_documents),
-      form_schema: normalizeFormSchema(config.form_schema)
+      form_schema: normalizeFormSchema(config.form_schema),
+      appointment_data: normalizeAppointmentData(config.appointment_data || config.form_schema?.appointment_data)
     });
     setShowConfigModal(true);
   };
@@ -326,7 +351,8 @@ const ConfigurationsTab = ({ showNotification }) => {
       destination: config.destination,
       service_fee: feeData,
       required_documents: normalizedDocs,
-      form_schema: normalizeFormSchema(config.form_schema)
+      form_schema: normalizeFormSchema(config.form_schema),
+      appointment_data: normalizeAppointmentData(config.appointment_data || config.form_schema?.appointment_data)
     });
     setShowConfigModal(true);
   };
@@ -345,7 +371,8 @@ const ConfigurationsTab = ({ showNotification }) => {
         whats_included: [...DEFAULT_WHATS_INCLUDED_POINTS]
       },
       required_documents: JSON.parse(JSON.stringify(defaultRequiredDocs)),
-      form_schema: normalizeFormSchema(null)
+      form_schema: normalizeFormSchema(null),
+      appointment_data: normalizeAppointmentData(null)
     });
     setShowConfigModal(true);
   };
@@ -547,9 +574,25 @@ const ConfigurationsTab = ({ showNotification }) => {
                             <span className="material-symbols-outlined text-primary text-sm">arrow_forward</span>
                             <span className="text-secondary">{config.destination}</span>
                           </div>
-                          <span className="text-[11px] text-outline mt-0.5">
-                            Route ID #{config.id}
-                          </span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[11px] text-outline">
+                              Route ID #{config.id}
+                            </span>
+                            {(() => {
+                              const hasApp = config.appointment_data?.enabled || config.form_schema?.appointment_data?.enabled;
+                              const earliest = config.appointment_data?.earliest_date || config.form_schema?.appointment_data?.earliest_date;
+                              return hasApp ? (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full" title={`Earliest: ${earliest || 'Configured'}`}>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                  Appointment: {earliest || 'Active'}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                                  No Appointment
+                                </span>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
                     </td>

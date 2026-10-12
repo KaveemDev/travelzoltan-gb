@@ -435,7 +435,7 @@ const WhyTrustUsPage = () => {
               Chat with Case Officer
             </button>
             <a
-              href="https://www.instagram.com/travelzoltan/"
+              href="https://www.instagram.com/zoltanvisaofficial/"
               target="_blank"
               rel="noopener noreferrer"
               className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 text-white font-headline font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md shadow-pink-600/20"
