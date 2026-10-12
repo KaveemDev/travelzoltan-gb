@@ -57,5 +57,5 @@ jobs:
           port: 21
           security: strict
           local-dir: client/dist/
-          server-dir: /www/gb.zoltanvisa.com/
-          dry-run: false
+          server-dir: /
+          dry-run: true
