@@ -713,7 +713,7 @@ const ChecklistPage = () => {
             </div>
 
             {/* Bottom Section: Earlier Appointments in other countries */}
-            {earlierCountries && earlierCountries.length > 0 && (
+            {/* {earlierCountries && earlierCountries.length > 0 && (
               <div className="border-t border-slate-100 bg-slate-50/40 px-6 sm:px-8 py-5">
                 <div className="space-y-3 text-center sm:text-left">
                   <p className="text-xs sm:text-sm font-bold text-slate-800 flex items-center justify-center sm:justify-start gap-1.5">
@@ -737,7 +737,7 @@ const ChecklistPage = () => {
                   </div>
                 </div>
               </div>
-            )}
+            )} */}
           </div>
         )}
 
