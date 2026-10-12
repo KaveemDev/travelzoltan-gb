@@ -5,17 +5,30 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "client/**"
+      - ".github/workflows/deploy.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: gb-frontend-deployment
+  cancel-in-progress: true
+
 jobs:
-  deploy:
+  build-and-deploy:
+    name: Build and Deploy to Blue Domain Hosting
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: client
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node.js
@@ -23,17 +36,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: client/package-lock.json
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build Vite project
+      - name: Build Vite application
         run: npm run build
 
-      - name: Verify build
+      - name: Verify production build
         run: test -f dist/index.html
 
-      - name: Deploy via FTPS
+      - name: Deploy frontend using FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.4.0
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -42,6 +56,6 @@ jobs:
           protocol: ftps
           port: 21
           security: strict
-          local-dir: ./dist/
+          local-dir: client/dist/
           server-dir: /www/gb.zoltanvisa.com/
           dry-run: true
