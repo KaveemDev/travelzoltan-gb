@@ -58,4 +58,4 @@ jobs:
           security: strict
           local-dir: client/dist/
           server-dir: /www/gb.zoltanvisa.com/
-          dry-run: true
+          dry-run: false
