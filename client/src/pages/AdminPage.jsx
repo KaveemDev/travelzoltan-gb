@@ -6,6 +6,7 @@ import LiveApprovalsTab from '../components/LiveApprovalsTab';
 import TravelVisaAgreementModal from '../components/TravelVisaAgreementModal';
 import ConfigurationsTab from '../components/ConfigurationsTab';
 import PaymentLinksTab from '../components/PaymentLinksTab';
+import TrustReviewsTab from '../components/TrustReviewsTab';
 
 // Format currency helper
 const formatCurrency = (amount) => {
@@ -146,6 +147,7 @@ const AdminPage = () => {
     { id: 'analytics', label: 'Analytics', icon: 'analytics' },
     { id: 'configurations', label: 'Configurations', icon: 'tune' },
     { id: 'live-approvals', label: 'Live Approvals', icon: 'verified' },
+    { id: 'trust-reviews', label: 'Trust & Reviews', icon: 'rate_review' },
     { id: 'settings', label: 'Settings', icon: 'settings' },
   ];
 
@@ -1605,6 +1607,7 @@ const AdminPage = () => {
               {activeMenu === 'analytics' && renderAnalytics()}
               {activeMenu === 'configurations' && <ConfigurationsTab showNotification={showNotification} />}
               {activeMenu === 'live-approvals' && <LiveApprovalsTab showNotification={showNotification} />}
+              {activeMenu === 'trust-reviews' && <TrustReviewsTab showNotification={showNotification} />}
               {activeMenu === 'settings' && renderSettings()}
             </>
           )}

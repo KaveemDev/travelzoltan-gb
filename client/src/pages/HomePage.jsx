@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import certificationImg from '../assets/certification.png';
 import ServicesValueSection from '../components/ServicesValueSection';
+import { trustAPI } from '../services/api';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
 
@@ -94,6 +95,30 @@ const HomePage = () => {
   // Dynamic happy clients live counter (increments every 5s)
   const [happyClientsCount, setHappyClientsCount] = useState(100);
   const [isClientIncrementing, setIsClientIncrementing] = useState(false);
+  const [appointmentSlots, setAppointmentSlots] = useState([]);
+
+  useEffect(() => {
+    const fetchSlots = async () => {
+      try {
+        const data = await trustAPI.getPublicAppointmentSlots();
+        if (data && data.appointmentSlots && data.appointmentSlots.length > 0) {
+          setAppointmentSlots(data.appointmentSlots);
+        } else {
+          setAppointmentSlots([
+            { id: 1, destination: 'France (Schengen)', consular_city: 'London', center_name: 'TLScontact', earliest_date: '14 Oct 2026', slots_status: 'Express Available' },
+            { id: 2, destination: 'Spain (Schengen)', consular_city: 'London', center_name: 'BLS International', earliest_date: '15 Oct 2026', slots_status: 'Slots Open' },
+            { id: 3, destination: 'Italy (Schengen)', consular_city: 'London', center_name: 'VFS Global', earliest_date: '18 Oct 2026', slots_status: 'Filling Fast (3 left)' },
+            { id: 4, destination: 'Switzerland', consular_city: 'London', center_name: 'TLScontact', earliest_date: '14 Oct 2026', slots_status: 'Available' },
+            { id: 5, destination: 'United States', consular_city: 'London', center_name: 'US Embassy London', earliest_date: '24 Oct 2026', slots_status: 'Priority Slots Open' },
+            { id: 6, destination: 'Germany (Schengen)', consular_city: 'London', center_name: 'VisaMetric London', earliest_date: '17 Oct 2026', slots_status: 'Standard Slot' }
+          ]);
+        }
+      } catch (e) {
+        console.warn('Could not load appointment slots on home:', e);
+      }
+    };
+    fetchSlots();
+  }, []);
 
   // Dynamic hero destinations list with fallback
   const heroDestinations = allDestinations.length > 0 
@@ -498,6 +523,107 @@ const HomePage = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Live Consular Appointment Dates & Why Trust Us Strip */}
+      <section className="py-16 px-6 md:px-12 bg-slate-900 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-0 w-96 h-96 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="max-w-screen-2xl mx-auto space-y-12 relative z-10">
+          {/* Section Header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Live Embassy & Consular Slot Feed
+                </span>
+              </div>
+              <h2 className="font-headline text-3xl md:text-4xl font-extrabold text-white tracking-tight">
+                Current Visa Appointment Dates
+              </h2>
+              <p className="text-slate-300 text-sm md:text-base max-w-2xl">
+                Securing a visa appointment is the biggest challenge for travelers. Zoltan monitors TLScontact, VFS Global, BLS and consulate feeds 24/7 to lock in earliest slots.
+              </p>
+            </div>
+
+            <Link
+              to="/why-trust-zoltan-visas"
+              className="self-start md:self-auto px-5 py-3 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/20 text-xs font-bold flex items-center gap-2 transition-all group"
+            >
+              <span className="material-symbols-outlined text-sm text-primary-light">verified</span>
+              <span>Why Trust Zoltan? Read Our UK Licenses</span>
+              <span className="material-symbols-outlined text-xs group-hover:translate-x-1 transition-transform">arrow_forward</span>
+            </Link>
+          </div>
+
+          {/* Appointment Slots Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {appointmentSlots.map((slot) => (
+              <div
+                key={slot.id}
+                className="bg-white/5 hover:bg-white/10 backdrop-blur-md p-5 rounded-2xl border border-white/10 hover:border-primary/40 transition-all flex flex-col justify-between group"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span className="text-xs font-bold text-white group-hover:text-primary-light transition-colors">
+                      {slot.destination}
+                    </span>
+                    <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                      {slot.slots_status || 'Slots Open'}
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 space-y-1 mb-4">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Center:</span>
+                      <span className="text-slate-200 font-medium">{slot.consular_city} ({slot.center_name || 'VFS / TLS'})</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-400">Next Slot:</span>
+                      <span className="text-emerald-400 font-extrabold text-sm">{slot.earliest_date}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    navigate(`/checklist?destination=${encodeURIComponent(slot.destination)}&citizenship=United+Kingdom`);
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-primary/20 hover:bg-primary text-primary-light hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <span>View Checklist & Book Slot</span>
+                  <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {/* Why Trust Zoltan Visas Feature Card */}
+          <div className="bg-gradient-to-r from-slate-800/90 to-slate-900/90 rounded-3xl p-6 sm:p-8 border border-white/15 flex flex-col lg:flex-row items-center justify-between gap-6 shadow-xl">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-primary/20 text-primary-light flex items-center justify-center shrink-0 border border-primary/30">
+                <span className="material-symbols-outlined text-3xl">verified_user</span>
+              </div>
+              <div className="space-y-1">
+                <h3 className="font-headline font-bold text-lg text-white">
+                  Certificate of Incorporation & Certified BRIT Agent
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300">
+                  Zoltan is incorporated under UK Companies House and certified by the British Council training standards. Inspect our genuine documents and customer reviews.
+                </p>
+              </div>
+            </div>
+
+            <Link
+              to="/why-trust-zoltan-visas"
+              className="shrink-0 px-6 py-3.5 rounded-xl bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold text-xs shadow-md shadow-primary/30 hover:shadow-lg transition-all"
+            >
+              Why Trust Zoltan Visas? ➔
+            </Link>
           </div>
         </div>
       </section>

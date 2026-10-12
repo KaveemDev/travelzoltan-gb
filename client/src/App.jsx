@@ -22,6 +22,7 @@ import HolidaysTermsPage from './pages/HolidaysTermsPage';
 import AboutUsPage from './pages/AboutUsPage';
 import ContactUsPage from './pages/ContactUsPage';
 import TravelVisaAgreementPage from './pages/TravelVisaAgreementPage';
+import WhyTrustUsPage from './pages/WhyTrustUsPage';
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -60,6 +61,8 @@ function AppContent() {
           <Route path="/car-rental-terms" element={<CarRentalTermsPage />} />
           <Route path="/holidays-terms" element={<HolidaysTermsPage />} />
           <Route path="/about-us" element={<AboutUsPage />} />
+          <Route path="/why-trust-zoltan-visas" element={<WhyTrustUsPage />} />
+          <Route path="/why-trust-us" element={<WhyTrustUsPage />} />
           <Route path="/contact-us" element={<ContactUsPage />} />
           <Route path="/contact" element={<ContactUsPage />} />
           <Route path="/travel-visa-agreement" element={<TravelVisaAgreementPage />} />

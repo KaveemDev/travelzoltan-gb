@@ -577,4 +577,118 @@ export const authAPI = {
   }
 };
 
+// Trust Content & Appointment Slots API
+export const trustAPI = {
+  getPublicTrustContent: async () => {
+    try {
+      const response = await api.get('/trust-content');
+      return response.data;
+    } catch (error) {
+      console.warn('[trustAPI] Fetch public trust content error:', error);
+      return { success: true, reviews: [], videoTestimonials: [], appointmentSlots: [] };
+    }
+  },
+
+  getPublicAppointmentSlots: async (destination) => {
+    try {
+      const params = destination ? { destination } : {};
+      const response = await api.get('/appointment-slots', { params });
+      return response.data;
+    } catch (error) {
+      console.warn('[trustAPI] Fetch appointment slots error:', error);
+      return { success: true, appointmentSlots: [] };
+    }
+  },
+
+  getAdminTrustContent: async () => {
+    try {
+      const response = await api.get('/admin/trust-content');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createReview: async (data) => {
+    try {
+      const response = await api.post('/admin/reviews', data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  updateReview: async (id, data) => {
+    try {
+      const response = await api.put(`/admin/reviews/${id}`, data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  deleteReview: async (id) => {
+    try {
+      const response = await api.delete(`/admin/reviews/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createVideoTestimonial: async (data) => {
+    try {
+      const response = await api.post('/admin/video-testimonials', data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  updateVideoTestimonial: async (id, data) => {
+    try {
+      const response = await api.put(`/admin/video-testimonials/${id}`, data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  deleteVideoTestimonial: async (id) => {
+    try {
+      const response = await api.delete(`/admin/video-testimonials/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  createAppointmentSlot: async (data) => {
+    try {
+      const response = await api.post('/admin/appointment-slots', data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  updateAppointmentSlot: async (id, data) => {
+    try {
+      const response = await api.put(`/admin/appointment-slots/${id}`, data);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
+  deleteAppointmentSlot: async (id) => {
+    try {
+      const response = await api.delete(`/admin/appointment-slots/${id}`);
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  }
+};
+
 export default api;

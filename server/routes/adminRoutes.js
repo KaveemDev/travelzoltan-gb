@@ -4,6 +4,7 @@ const adminController = require('../controllers/adminController');
 const authController = require('../controllers/authController');
 const liveApprovalController = require('../controllers/liveApprovalController');
 const paymentLinkController = require('../controllers/paymentLinkController');
+const trustContentController = require('../controllers/trustContentController');
 const { requireAuth } = require('../middlewares/auth');
 
 // ========== PUBLIC AUTH ROUTES (No authentication required) ==========
@@ -69,5 +70,19 @@ router.put('/live-approvals/:id/toggle', liveApprovalController.toggleApprovalSt
 router.delete('/live-approvals/:id', liveApprovalController.deleteApproval);
 router.post('/live-approvals/import-from-applications', liveApprovalController.importFromApplications);
 router.post('/live-approvals/reset-defaults', liveApprovalController.resetDefaultApprovals);
+
+// Trust Content & Reviews & Video Testimonials
+router.get('/trust-content', trustContentController.getAdminTrustContent);
+router.post('/reviews', trustContentController.createReview);
+router.put('/reviews/:id', trustContentController.updateReview);
+router.delete('/reviews/:id', trustContentController.deleteReview);
+router.post('/video-testimonials', trustContentController.createVideoTestimonial);
+router.put('/video-testimonials/:id', trustContentController.updateVideoTestimonial);
+router.delete('/video-testimonials/:id', trustContentController.deleteVideoTestimonial);
+
+// Appointment Slots
+router.post('/appointment-slots', trustContentController.createAppointmentSlot);
+router.put('/appointment-slots/:id', trustContentController.updateAppointmentSlot);
+router.delete('/appointment-slots/:id', trustContentController.deleteAppointmentSlot);
 
 module.exports = router;

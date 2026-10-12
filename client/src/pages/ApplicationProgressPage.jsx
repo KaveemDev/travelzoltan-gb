@@ -107,6 +107,7 @@ const ApplicationProgressPage = () => {
   const initialCategory = searchParams.get('category') || location.state?.selectedCategory || 'employed';
   const initialVisaCategory = searchParams.get('visaType') || location.state?.selectedVisaCategory || 'tourist';
   const initialVisaData = location.state?.visaData || null;
+  const initialAppointmentDate = searchParams.get('appointmentDate') || location.state?.preferredAppointmentDate || '';
 
   const [selectedCategory, setSelectedCategory] = useState(initialCategory);
   const [selectedVisaCategory, setSelectedVisaCategory] = useState(initialVisaCategory);
@@ -136,7 +137,8 @@ const ApplicationProgressPage = () => {
     residentialAddress: '',
     dateOfBirth: '',
     destinationAddress: '',
-    accommodationAddress: ''
+    accommodationAddress: '',
+    preferredAppointmentDate: initialAppointmentDate
   });
 
   // Dynamic form responses
