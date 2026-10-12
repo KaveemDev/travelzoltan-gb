@@ -220,7 +220,15 @@ const normalizeFormSchema = (form_schema) => {
 };
 
 export const normalizeAppointmentData = (data) => {
-  if (!data || typeof data !== 'object') {
+  let parsed = data;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (e) {
+      parsed = null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') {
     return {
       enabled: false,
       earliest_date: '',
@@ -231,14 +239,24 @@ export const normalizeAppointmentData = (data) => {
       earlier_countries: []
     };
   }
+  const isEnabled = Boolean(
+    parsed.enabled === true ||
+    parsed.enabled === 1 ||
+    parsed.enabled === '1' ||
+    parsed.enabled === 'true' ||
+    parsed.has_appointment === true ||
+    parsed.has_appointment === 1 ||
+    parsed.has_appointment === '1' ||
+    parsed.has_appointment === 'true'
+  );
   return {
-    enabled: data.enabled === true || data.has_appointment === true,
-    earliest_date: data.earliest_date || '',
-    days_until: data.days_until !== undefined && data.days_until !== null ? data.days_until : '',
-    badge_text: data.badge_text || '',
-    location: data.location || '',
-    centers: Array.isArray(data.centers) ? data.centers : [],
-    earlier_countries: Array.isArray(data.earlier_countries) ? data.earlier_countries : []
+    enabled: isEnabled,
+    earliest_date: parsed.earliest_date || '',
+    days_until: parsed.days_until !== undefined && parsed.days_until !== null ? parsed.days_until : '',
+    badge_text: parsed.badge_text || '',
+    location: parsed.location || '',
+    centers: Array.isArray(parsed.centers) ? parsed.centers : [],
+    earlier_countries: Array.isArray(parsed.earlier_countries) ? parsed.earlier_countries : []
   };
 };
 
@@ -293,9 +311,15 @@ const ConfigurationsTab = ({ showNotification }) => {
           ? configForm.service_fee.whats_included.map(p => p.trim()).filter(Boolean)
           : []
       };
+      const cleanedAppointment = normalizeAppointmentData(configForm.appointment_data);
       const payload = {
         ...configForm,
-        service_fee: cleanedFee
+        service_fee: cleanedFee,
+        appointment_data: cleanedAppointment,
+        form_schema: {
+          ...(configForm.form_schema || {}),
+          appointment_data: cleanedAppointment
+        }
       };
 
       if (editingConfig) {
@@ -307,7 +331,7 @@ const ConfigurationsTab = ({ showNotification }) => {
       }
       setShowConfigModal(false);
       setEditingConfig(null);
-      loadConfigs();
+      await loadConfigs();
     } catch (err) {
       showNotification(err.message || 'Failed to save configuration', 'error');
     } finally {
@@ -579,8 +603,9 @@ const ConfigurationsTab = ({ showNotification }) => {
                               Route ID #{config.id}
                             </span>
                             {(() => {
-                              const hasApp = config.appointment_data?.enabled || config.form_schema?.appointment_data?.enabled;
-                              const earliest = config.appointment_data?.earliest_date || config.form_schema?.appointment_data?.earliest_date;
+                              const appObj = normalizeAppointmentData(config.appointment_data || config.form_schema?.appointment_data);
+                              const hasApp = appObj.enabled;
+                              const earliest = appObj.earliest_date;
                               return hasApp ? (
                                 <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-full" title={`Earliest: ${earliest || 'Configured'}`}>
                                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>

@@ -158,12 +158,13 @@ const getPublicAppointmentSlots = async (req, res) => {
           const matchingConfigs = await VisaConfiguration.findAll({
             where: { destination: destination.trim() }
           });
+          const configSlots = [];
           for (const cfg of matchingConfigs) {
             const appData = cfg.appointment_data || cfg.form_schema?.appointment_data;
             if (appData && (appData.enabled === true || appData.has_appointment === true)) {
               if (Array.isArray(appData.centers) && appData.centers.length > 0) {
                 appData.centers.forEach((c, idx) => {
-                  slots.push({
+                  configSlots.push({
                     id: `cfg-${cfg.id}-${idx}`,
                     destination: cfg.destination,
                     consular_city: c.city || appData.location || 'Main Center',
@@ -176,7 +177,7 @@ const getPublicAppointmentSlots = async (req, res) => {
                   });
                 });
               } else if (appData.earliest_date) {
-                slots.push({
+                configSlots.push({
                   id: `cfg-${cfg.id}`,
                   destination: cfg.destination,
                   consular_city: appData.location || 'Main Center',
@@ -189,6 +190,9 @@ const getPublicAppointmentSlots = async (req, res) => {
                 });
               }
             }
+          }
+          if (configSlots.length > 0) {
+            slots = [...configSlots, ...slots];
           }
         }
       } catch (cfgErr) {

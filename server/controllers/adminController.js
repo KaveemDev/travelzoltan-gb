@@ -406,6 +406,33 @@ const getAnalytics = async (req, res) => {
   }
 };
 
+const normalizeAppointmentData = (data) => {
+  if (!data) return null;
+  let parsed = data;
+  if (typeof parsed === 'string') {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch (e) {
+      return null;
+    }
+  }
+  if (!parsed || typeof parsed !== 'object') return null;
+  const isEnabled = Boolean(
+    parsed.enabled === true ||
+    parsed.enabled === 1 ||
+    parsed.enabled === '1' ||
+    parsed.enabled === 'true' ||
+    parsed.has_appointment === true ||
+    parsed.has_appointment === 1 ||
+    parsed.has_appointment === '1' ||
+    parsed.has_appointment === 'true'
+  );
+  return {
+    ...parsed,
+    enabled: isEnabled
+  };
+};
+
 // GET /api/admin/configurations
 const getAllConfigurations = async (req, res) => {
   try {
@@ -417,7 +444,7 @@ const getAllConfigurations = async (req, res) => {
       return {
         ...plain,
         service_fee: normalizeServiceFee(plain.service_fee),
-        appointment_data: plain.appointment_data || plain.form_schema?.appointment_data || null
+        appointment_data: normalizeAppointmentData(plain.appointment_data || plain.form_schema?.appointment_data)
       };
     });
     return res.status(200).json(normalized);
@@ -444,9 +471,10 @@ const createConfiguration = async (req, res) => {
     }
 
     const normalizedFee = normalizeServiceFee(service_fee);
+    const normalizedApp = normalizeAppointmentData(appointment_data);
     const enrichedFormSchema = {
       ...(form_schema || {}),
-      appointment_data: appointment_data || null
+      appointment_data: normalizedApp
     };
 
     const config = await VisaConfiguration.create({
@@ -455,7 +483,7 @@ const createConfiguration = async (req, res) => {
       service_fee: normalizedFee,
       required_documents,
       form_schema: enrichedFormSchema,
-      appointment_data: appointment_data || null
+      appointment_data: normalizedApp
     });
 
     return res.status(201).json({ message: 'Configuration created successfully', configuration: config });
@@ -497,12 +525,13 @@ const updateConfiguration = async (req, res) => {
       configuration.changed('form_schema', true);
     }
     if (appointment_data !== undefined) {
-      configuration.appointment_data = appointment_data;
+      const normalizedApp = normalizeAppointmentData(appointment_data);
+      configuration.appointment_data = normalizedApp;
       configuration.changed('appointment_data', true);
       const currentSchema = configuration.form_schema || {};
       configuration.form_schema = {
         ...currentSchema,
-        appointment_data: appointment_data
+        appointment_data: normalizedApp
       };
       configuration.changed('form_schema', true);
     }

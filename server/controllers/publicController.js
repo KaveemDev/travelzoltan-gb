@@ -424,10 +424,25 @@ const getVisaRequirements = async (req, res) => {
       return res.status(200).json(DEFAULT_VISA_REQUIREMENTS);
     }
 
-    const appData = config.appointment_data || config.form_schema?.appointment_data || null;
+    const rawAppData = config.appointment_data || config.form_schema?.appointment_data || null;
     let appointment_data = null;
-    if (appData && (appData.enabled === true || appData.has_appointment === true)) {
-      appointment_data = appData;
+    if (rawAppData) {
+      let parsed = rawAppData;
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch (e) { parsed = null; }
+      }
+      if (parsed && typeof parsed === 'object') {
+        const isEnabled = Boolean(
+          parsed.enabled === true || parsed.enabled === 1 || parsed.enabled === '1' || parsed.enabled === 'true' ||
+          parsed.has_appointment === true || parsed.has_appointment === 1 || parsed.has_appointment === '1' || parsed.has_appointment === 'true'
+        );
+        if (isEnabled) {
+          appointment_data = {
+            ...parsed,
+            enabled: true
+          };
+        }
+      }
     }
 
     return res.status(200).json({

@@ -5,14 +5,15 @@ import { visaAPI, trustAPI } from '../services/api';
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
 
 // Speedometer Gauge Component modeled after the appointment availability meter
+// Speedometer Gauge Component modeled after the appointment availability meter
 const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
   const currentDays = Math.min(Math.max(Number(days) || 0, 0), maxDays);
-  const cx = 150;
-  const cy = 135;
-  const rInner = 75;
+  const cx = 160;
+  const cy = 145;
+  const rInner = 74;
   const rOuterMinor = 86;
   const rOuterMajor = 94;
-  const rLabel = 108;
+  const rLabel = 112;
   const totalTicks = 90;
   const startAngle = 210;
   const sweepAngle = 240;
@@ -44,21 +45,27 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
     });
   }
 
-  // Pointer needle pointing at currentDays
+  // Pointer needle pointing at currentDays extending through ticks
   const needleAngle = startAngle - (currentDays / totalTicks) * sweepAngle;
   const needleRad = (needleAngle * Math.PI) / 180;
-  const needleX = cx + (rInner - 5) * Math.cos(needleRad);
-  const needleY = cy - (rInner - 5) * Math.sin(needleRad);
-  const needleBaseX = cx + 48 * Math.cos(needleRad);
-  const needleBaseY = cy - 48 * Math.sin(needleRad);
+  const needleInnerX = cx + 58 * Math.cos(needleRad);
+  const needleInnerY = cy - 58 * Math.sin(needleRad);
+  const needleOuterX = cx + (rOuterMajor + 2) * Math.cos(needleRad);
+  const needleOuterY = cy - (rOuterMajor + 2) * Math.sin(needleRad);
 
   return (
-    <div className="relative w-full max-w-[320px] mx-auto flex flex-col items-center select-none py-1">
+    <div className="relative w-full max-w-[320px] mx-auto flex flex-col items-center select-none">
       <svg
-        viewBox="0 0 300 215"
+        viewBox="0 0 320 220"
         className="w-full h-auto overflow-visible"
         aria-label={`${currentDays} days until nearest available appointment`}
       >
+        <defs>
+          <filter id="dialShadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="4" stdDeviation="8" floodColor="#0f172a" floodOpacity="0.08" />
+          </filter>
+        </defs>
+
         {/* Radial ticks */}
         {ticks.map((t) => (
           <g key={t.val}>
@@ -67,7 +74,7 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
               y1={t.y1}
               x2={t.x2}
               y2={t.y2}
-              stroke={t.isFilled ? '#4f46e5' : '#cbd5e1'}
+              stroke={t.isFilled ? '#4f46e5' : '#e2e8f0'}
               strokeWidth={t.isFilled ? (t.isMajor ? 2.5 : 2) : (t.isMajor ? 1.5 : 1)}
               strokeLinecap="round"
             />
@@ -88,26 +95,26 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
           </g>
         ))}
 
-        {/* Needle pointer */}
-        <line
-          x1={needleBaseX}
-          y1={needleBaseY}
-          x2={needleX}
-          y2={needleY}
-          stroke="#4f46e5"
-          strokeWidth="3.5"
-          strokeLinecap="round"
-        />
-
-        {/* Center circular disc */}
+        {/* Center circular disc with clean soft shadow */}
         <circle
           cx={cx}
           cy={cy}
           r={62}
           fill="#ffffff"
           stroke="#f1f5f9"
-          strokeWidth="2"
-          filter="drop-shadow(0 4px 10px rgba(0,0,0,0.06))"
+          strokeWidth="1.5"
+          filter="url(#dialShadow)"
+        />
+
+        {/* Needle pointer extending through ticks to the number */}
+        <line
+          x1={needleInnerX}
+          y1={needleInnerY}
+          x2={needleOuterX}
+          y2={needleOuterY}
+          stroke="#4f46e5"
+          strokeWidth="3"
+          strokeLinecap="round"
         />
 
         {/* Dial Center text */}
@@ -127,7 +134,7 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
           y={cy + 12}
           textAnchor="middle"
           fill="#64748b"
-          fontSize="8.5"
+          fontSize="9"
           fontWeight="600"
           fontFamily="system-ui, sans-serif"
         >
@@ -135,10 +142,10 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
         </text>
         <text
           x={cx}
-          y={cy + 23}
+          y={cy + 24}
           textAnchor="middle"
           fill="#64748b"
-          fontSize="8.5"
+          fontSize="9"
           fontWeight="600"
           fontFamily="system-ui, sans-serif"
         >
@@ -296,14 +303,14 @@ const ChecklistPage = () => {
   useEffect(() => {
     const appCfg = visaData?.appointment_data;
     if (appCfg && (appCfg.enabled === true || appCfg.has_appointment === true)) {
-      if (!selectedAppointmentDate && appCfg.earliest_date) {
+      if (appCfg.earliest_date) {
         setSelectedAppointmentDate(appCfg.earliest_date);
       }
-      if (!selectedLocation) {
+      if (appCfg.location || appCfg.centers?.[0]?.city) {
         setSelectedLocation(appCfg.location || appCfg.centers?.[0]?.city || '');
       }
     }
-  }, [visaData, selectedAppointmentDate, selectedLocation]);
+  }, [visaData]);
 
   // Determine if appointment is enabled from backend
   const appointmentConfig = (visaData?.appointment_data && (visaData.appointment_data.enabled === true || visaData.appointment_data.has_appointment === true))
@@ -593,127 +600,144 @@ const ChecklistPage = () => {
 
         {/* Available Appointment Card - Controlled from backend (only shown if configured) */}
         {hasAppointment && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm mb-6 max-w-3xl mx-auto transition-all">
-            {/* Top Urgency / Slots Available Badge */}
-            <div className="flex items-center justify-start mb-4">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold shadow-2xs">
+          <div className="w-full bg-white rounded-3xl border border-slate-200/90 shadow-sm mb-6 transition-all overflow-hidden">
+            {/* Top Bar with Urgency Pill */}
+            <div className="px-6 pt-6 sm:px-8 sm:pt-8 flex items-center justify-between flex-wrap gap-3">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold shadow-2xs">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                 <span>{badgeText || `Available slots for ${earliestDate}!`}</span>
               </div>
-            </div>
-
-            {/* Headline */}
-            <h3 className="font-headline text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mb-5 leading-tight">
-              Visa Appointment as Early as{' '}
-              <span className="text-primary font-black">{earliestDate}</span>
-            </h3>
-
-            {/* Appointment Location Dropdown */}
-            <div className="space-y-1.5 mb-4">
-              <label className="block text-xs font-bold text-slate-700">
-                Appointment Location
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-primary">
-                  <span className="material-symbols-outlined text-xl">location_on</span>
-                </div>
-                <select
-                  value={selectedLocation || (availableCenters[0]?.city || '')}
-                  onChange={(e) => {
-                    const loc = e.target.value;
-                    setSelectedLocation(loc);
-                    const found = availableCenters.find((c) => (c.city || '').toLowerCase() === loc.toLowerCase());
-                    if (found && found.earliest_date) {
-                      setSelectedAppointmentDate(found.earliest_date);
-                    }
-                  }}
-                  className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/80 border border-slate-200 text-slate-900 text-sm font-bold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/30 transition-all shadow-2xs"
-                >
-                  {availableCenters.map((center, idx) => (
-                    <option key={idx} value={center.city}>
-                      {center.city} {center.center_name ? `(${center.center_name})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
-                  <span className="material-symbols-outlined text-lg">expand_more</span>
-                </div>
+              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
+                <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>
+                <span>Live Consular Quota</span>
               </div>
             </div>
 
-            {/* Reserve Appointment CTA Button */}
-            <button
-              type="button"
-              onClick={() => {
-                setIsAppointmentReserved(true);
-                if (!selectedAppointmentDate && earliestDate) {
-                  setSelectedAppointmentDate(earliestDate);
-                }
-              }}
-              className={`w-full py-3.5 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md mb-6 ${
-                isAppointmentReserved
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25 ring-2 ring-emerald-600/30'
-                  : 'bg-primary hover:bg-primary-dark text-white shadow-primary/25 active:scale-[0.99]'
-              }`}
-            >
-              <span className="material-symbols-outlined text-lg">
-                {isAppointmentReserved ? 'check_circle' : 'event_available'}
-              </span>
-              <span>
-                {isAppointmentReserved
-                  ? `Appointment Reserved for ${earliestDate}`
-                  : 'Reserve Appointment Now'}
-              </span>
-            </button>
+            {/* Main Content: Responsive 2-column grid on desktop, natural stack on mobile */}
+            <div className="p-6 sm:p-8 pt-4 sm:pt-5 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+              {/* Left Column: Details & Action */}
+              <div className="lg:col-span-7 flex flex-col justify-between space-y-5">
+                <div>
+                  <h3 className="font-headline text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
+                    Visa Appointment as Early as{' '}
+                    <span className="text-[#4f46e5] font-black">{earliestDate}</span>
+                  </h3>
+                  <p className="text-xs sm:text-sm text-slate-500 mt-1.5">
+                    Official embassy & biometrics appointments currently open for {destination}.
+                  </p>
+                </div>
 
-            {/* Speedometer Gauge Dial Meter */}
-            <div className="py-2">
-              <AppointmentSpeedometer days={daysUntil} maxDays={90} />
+                {/* Appointment Location Dropdown */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Appointment Location
+                  </label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#4f46e5]">
+                      <span className="material-symbols-outlined text-xl">location_on</span>
+                    </div>
+                    <select
+                      value={selectedLocation || (availableCenters[0]?.city || '')}
+                      onChange={(e) => {
+                        const loc = e.target.value;
+                        setSelectedLocation(loc);
+                        const found = availableCenters.find((c) => (c.city || '').toLowerCase() === loc.toLowerCase());
+                        if (found && found.earliest_date) {
+                          setSelectedAppointmentDate(found.earliest_date);
+                        }
+                      }}
+                      className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/70 border border-slate-200 text-slate-900 text-sm font-bold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/20 focus:border-[#4f46e5] transition-all shadow-2xs"
+                    >
+                      {availableCenters.map((center, idx) => (
+                        <option key={idx} value={center.city}>
+                          {center.city} {center.center_name ? `(${center.center_name})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
+                      <span className="material-symbols-outlined text-lg">expand_more</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reserve Appointment CTA Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAppointmentReserved(true);
+                    if (!selectedAppointmentDate && earliestDate) {
+                      setSelectedAppointmentDate(earliestDate);
+                    }
+                  }}
+                  className={`w-full py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md ${
+                    isAppointmentReserved
+                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25 ring-2 ring-emerald-600/30'
+                      : 'bg-[#4f46e5] hover:bg-[#4338ca] text-white shadow-[#4f46e5]/25 active:scale-[0.99]'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-xl">
+                    {isAppointmentReserved ? 'check_circle' : 'event_available'}
+                  </span>
+                  <span>
+                    {isAppointmentReserved
+                      ? `Appointment Reserved for ${earliestDate}`
+                      : 'Reserve Appointment Now'}
+                  </span>
+                </button>
+
+                {/* Optional Custom Target Travel Date Accordion */}
+                <div className="pt-1">
+                  <details className="group inline-block text-left">
+                    <summary className="text-[11px] font-bold text-[#4f46e5] hover:underline cursor-pointer list-none flex items-center gap-1">
+                      <span>Need a different target travel date?</span>
+                      <span className="material-symbols-outlined text-xs group-open:rotate-180 transition-transform">expand_more</span>
+                    </summary>
+                    <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-3">
+                      <label className="text-xs text-slate-600 font-medium">Target Date:</label>
+                      <input
+                        type="date"
+                        min={new Date().toISOString().split('T')[0]}
+                        value={customAppointmentDate}
+                        onChange={(e) => setCustomAppointmentDate(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white"
+                      />
+                    </div>
+                  </details>
+                </div>
+              </div>
+
+              {/* Right Column: Speedometer Dial Gauge Meter */}
+              <div className="lg:col-span-5 flex flex-col items-center justify-center bg-slate-50/70 rounded-3xl p-6 border border-slate-100/90 shadow-2xs">
+                <AppointmentSpeedometer days={daysUntil} maxDays={90} />
+              </div>
             </div>
 
-            {/* Earlier Appointments Available in other countries */}
+            {/* Bottom Section: Earlier Appointments in other countries */}
             {earlierCountries && earlierCountries.length > 0 && (
-              <div className="mt-6 pt-5 border-t border-slate-100 space-y-3 text-center">
-                <p className="text-xs sm:text-sm font-bold text-slate-800">
-                  Earlier appointments available for these countries from {selectedLocation || destination}
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  {earlierCountries.map((country, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => {
-                        setTempDestination(country);
-                        setDestination(country);
-                      }}
-                      className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 hover:text-slate-900 text-xs font-semibold border border-slate-200/60 transition-all cursor-pointer"
-                    >
-                      {country}
-                    </button>
-                  ))}
+              <div className="border-t border-slate-100 bg-slate-50/40 px-6 sm:px-8 py-5">
+                <div className="space-y-3 text-center sm:text-left">
+                  <p className="text-xs sm:text-sm font-bold text-slate-800 flex items-center justify-center sm:justify-start gap-1.5">
+                    <span className="material-symbols-outlined text-[#4f46e5] text-base">flight_takeoff</span>
+                    Earlier appointments available for these countries from {selectedLocation || destination}
+                  </p>
+                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                    {earlierCountries.map((country, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => {
+                          setTempDestination(country);
+                          setDestination(country);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-semibold border border-slate-200/80 transition-all cursor-pointer shadow-2xs hover:border-slate-300"
+                      >
+                        {country}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
-
-            {/* Optional Custom Target Travel Date Accordion */}
-            <div className="mt-4 pt-3 text-center">
-              <details className="group inline-block text-left">
-                <summary className="text-[11px] font-bold text-primary hover:underline cursor-pointer list-none flex items-center justify-center gap-1">
-                  <span>Need a different target travel date?</span>
-                  <span className="material-symbols-outlined text-xs group-open:rotate-180 transition-transform">expand_more</span>
-                </summary>
-                <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-3">
-                  <label className="text-xs text-slate-600 font-medium">Target Date:</label>
-                  <input
-                    type="date"
-                    min={new Date().toISOString().split('T')[0]}
-                    value={customAppointmentDate}
-                    onChange={(e) => setCustomAppointmentDate(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white"
-                  />
-                </div>
-              </details>
-            </div>
           </div>
         )}
 
