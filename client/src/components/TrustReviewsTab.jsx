@@ -167,6 +167,13 @@ const TrustReviewsTab = ({ showNotification }) => {
     setShowVideoModal(true);
   };
 
+  // YouTube ID helper
+  const getYouTubeVideoId = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    const match = url.trim().match(/(?:youtube(?:-nocookie)?\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?|shorts|live)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i);
+    return match && match[1] ? match[1] : null;
+  };
+
   const handleSaveVideo = async (e) => {
     e.preventDefault();
     if (!videoForm.customer_name.trim() || !videoForm.video_url.trim()) {
@@ -174,12 +181,19 @@ const TrustReviewsTab = ({ showNotification }) => {
       return;
     }
 
+    // Auto-detect YouTube thumbnail if none provided
+    const ytId = getYouTubeVideoId(videoForm.video_url);
+    const formPayload = {
+      ...videoForm,
+      thumbnail_url: videoForm.thumbnail_url?.trim() || (ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : '')
+    };
+
     try {
       if (editingVideo) {
-        await trustAPI.updateVideoTestimonial(editingVideo.id, videoForm);
+        await trustAPI.updateVideoTestimonial(editingVideo.id, formPayload);
         showNotification?.('Video testimonial updated', 'success');
       } else {
-        await trustAPI.createVideoTestimonial(videoForm);
+        await trustAPI.createVideoTestimonial(formPayload);
         showNotification?.('Video testimonial added', 'success');
       }
       setShowVideoModal(false);
@@ -732,6 +746,29 @@ const TrustReviewsTab = ({ showNotification }) => {
                   value={videoForm.quote}
                   onChange={(e) => setVideoForm({ ...videoForm, quote: e.target.value })}
                   placeholder="e.g. 'Got our Schengen visa in 48 hours without stress!'"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-medium"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Custom Thumbnail Image URL (Optional)</label>
+                <input
+                  type="url"
+                  value={videoForm.thumbnail_url}
+                  onChange={(e) => setVideoForm({ ...videoForm, thumbnail_url: e.target.value })}
+                  placeholder="Leave blank to auto-detect YouTube thumbnail"
+                  className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-medium"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">If empty, YouTube videos will automatically load their high-resolution thumbnail.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Duration (Optional)</label>
+                <input
+                  type="text"
+                  value={videoForm.duration}
+                  onChange={(e) => setVideoForm({ ...videoForm, duration: e.target.value })}
+                  placeholder="e.g. '1:30 min' or '0:45'"
                   className="w-full p-2.5 rounded-xl border border-slate-300 text-xs font-medium"
                 />
               </div>

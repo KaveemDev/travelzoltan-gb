@@ -63,22 +63,64 @@ const WhyTrustUsPage = () => {
     fetchTrustData();
   }, []);
 
-  // Format video embed URL safely
+  // Extract YouTube ID from any format (shorts, youtu.be, watch, embed, live, mobile)
+  const getYouTubeVideoId = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    const trimmed = url.trim();
+    const regExp = /(?:youtube(?:-nocookie)?\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?|shorts|live)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i;
+    const match = trimmed.match(regExp);
+    return match && match[1] ? match[1] : null;
+  };
+
+  // Extract Vimeo ID
+  const getVimeoVideoId = (url) => {
+    if (!url || typeof url !== 'string') return null;
+    const match = url.trim().match(/(?:vimeo\.com\/)(\d+)/);
+    return match && match[1] ? match[1] : null;
+  };
+
+  // Format video embed URL safely for iframe playback
   const getEmbedUrl = (url) => {
     if (!url) return '';
-    if (url.includes('youtube.com/watch?v=')) {
-      const videoId = url.split('v=')[1]?.split('&')[0];
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+    const trimmed = url.trim();
+
+    // YouTube (including Shorts, youtu.be, standard watch, etc.)
+    const ytId = getYouTubeVideoId(trimmed);
+    if (ytId) {
+      return `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1`;
     }
-    if (url.includes('youtu.be/')) {
-      const videoId = url.split('youtu.be/')[1]?.split('?')[0];
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+
+    // Vimeo
+    const vimeoId = getVimeoVideoId(trimmed);
+    if (vimeoId) {
+      return `https://player.vimeo.com/video/${vimeoId}?autoplay=1`;
     }
-    if (url.includes('vimeo.com/')) {
-      const videoId = url.split('vimeo.com/')[1]?.split('?')[0];
-      return `https://player.vimeo.com/video/${videoId}?autoplay=1`;
+
+    return trimmed;
+  };
+
+  // Automatically get thumbnail URL if none provided
+  const getVideoThumbnail = (vid) => {
+    if (vid.thumbnail_url && vid.thumbnail_url.trim() !== '') {
+      return vid.thumbnail_url;
     }
-    return url;
+    const ytId = getYouTubeVideoId(vid.video_url);
+    if (ytId) {
+      return `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+    }
+    return null;
+  };
+
+  // Helper to detect if video URL needs an iframe
+  const isVideoIframe = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    return Boolean(
+      getYouTubeVideoId(url) ||
+      getVimeoVideoId(url) ||
+      url.includes('youtube.com') ||
+      url.includes('youtu.be') ||
+      url.includes('vimeo.com')
+    );
   };
 
   return (
@@ -245,67 +287,78 @@ const WhyTrustUsPage = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {videoTestimonials.map((vid) => (
-                <div
-                  key={vid.id}
-                  className="bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                >
-                  <div className="p-4 sm:p-5">
-                    <div className="flex items-center justify-between gap-2 mb-3">
-                      <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
-                        {vid.destination}
-                      </span>
-                      {vid.duration && (
-                        <span className="text-[11px] text-slate-500 font-medium">
-                          {vid.duration}
+              {videoTestimonials.map((vid) => {
+                const thumbUrl = getVideoThumbnail(vid);
+                return (
+                  <div
+                    key={vid.id}
+                    className="bg-slate-50 rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+                  >
+                    <div className="p-4 sm:p-5">
+                      <div className="flex items-center justify-between gap-2 mb-3">
+                        <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+                          {vid.destination}
                         </span>
+                        {vid.duration && (
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {vid.duration}
+                          </span>
+                        )}
+                      </div>
+                      <h4 className="font-headline font-bold text-base text-slate-900 mb-1">
+                        {vid.title || `${vid.customer_name}'s Visa Journey`}
+                      </h4>
+                      {vid.quote && (
+                        <p className="text-xs text-slate-600 italic line-clamp-2 mb-4">
+                          "{vid.quote}"
+                        </p>
                       )}
                     </div>
-                    <h4 className="font-headline font-bold text-base text-slate-900 mb-1">
-                      {vid.title || `${vid.customer_name}'s Visa Journey`}
-                    </h4>
-                    {vid.quote && (
-                      <p className="text-xs text-slate-600 italic line-clamp-2 mb-4">
-                        "{vid.quote}"
-                      </p>
-                    )}
-                  </div>
 
-                  {/* Video Thumbnail / Trigger */}
-                  <div
-                    onClick={() => setActiveVideoModal(vid)}
-                    className="relative bg-slate-900 aspect-video flex items-center justify-center cursor-pointer group overflow-hidden"
-                  >
-                    {vid.thumbnail_url ? (
-                      <img
-                        src={vid.thumbnail_url}
-                        alt={vid.customer_name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-tr from-slate-900 via-slate-800 to-slate-950 flex items-center justify-center" />
-                    )}
-                    <div className="absolute inset-0 bg-slate-950/30 group-hover:bg-slate-950/20 transition-colors" />
-                    <div className="w-14 h-14 rounded-full bg-primary text-white flex items-center justify-center shadow-lg transform group-hover:scale-110 transition-transform relative z-10">
-                      <span className="material-symbols-outlined text-3xl ml-0.5">play_arrow</span>
-                    </div>
-                  </div>
-
-                  <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-bold text-slate-800">{vid.customer_name}</p>
-                      <p className="text-[10px] text-slate-500">Verified Visa Applicant</p>
-                    </div>
-                    <button
+                    {/* Video Thumbnail / Trigger */}
+                    <div
                       onClick={() => setActiveVideoModal(vid)}
-                      className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      className="relative bg-slate-950 aspect-video flex items-center justify-center cursor-pointer group overflow-hidden select-none"
                     >
-                      Watch Video
-                      <span className="material-symbols-outlined text-xs">arrow_forward</span>
-                    </button>
+                      {thumbUrl ? (
+                        <img
+                          src={thumbUrl}
+                          alt={vid.customer_name}
+                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 w-full h-full bg-gradient-to-tr from-slate-950 via-slate-900 to-slate-850 flex items-center justify-center">
+                          <span className="material-symbols-outlined text-5xl text-slate-700/60">smart_display</span>
+                        </div>
+                      )}
+                      {/* Dark overlay for contrast */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-slate-950/30 to-slate-950/20 group-hover:bg-slate-950/20 transition-colors duration-300" />
+
+                      {/* Centered Play Button */}
+                      <div className="relative z-10 flex items-center justify-center">
+                        <div className="absolute w-16 h-16 rounded-full bg-primary/30 animate-ping opacity-60 pointer-events-none" />
+                        <div className="w-16 h-16 rounded-full bg-primary text-white flex items-center justify-center shadow-xl shadow-primary/40 border-2 border-white/40 transform group-hover:scale-115 group-hover:bg-primary-dark transition-all duration-300">
+                          <span className="material-symbols-outlined text-3xl ml-1 text-white drop-shadow-sm">play_arrow</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-white border-t border-slate-100 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-bold text-slate-800">{vid.customer_name}</p>
+                        <p className="text-[10px] text-slate-500">Verified Visa Applicant</p>
+                      </div>
+                      <button
+                        onClick={() => setActiveVideoModal(vid)}
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1 cursor-pointer"
+                      >
+                        Watch Video
+                        <span className="material-symbols-outlined text-xs">arrow_forward</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </section>
@@ -510,27 +563,36 @@ const WhyTrustUsPage = () => {
 
       {/* Video Modal Player */}
       {activeVideoModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4 animate-dialog-appear">
-          <div className="bg-slate-900 rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-800">
+        <div
+          onClick={() => setActiveVideoModal(null)}
+          className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 animate-dialog-appear"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="bg-slate-900 rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-800"
+          >
             <div className="p-4 bg-slate-950 text-white flex items-center justify-between border-b border-slate-800">
               <div>
                 <p className="text-xs text-primary-light font-bold">{activeVideoModal.destination}</p>
-                <h4 className="font-headline font-bold text-base text-white">{activeVideoModal.customer_name}</h4>
+                <h4 className="font-headline font-bold text-base text-white">
+                  {activeVideoModal.title || `${activeVideoModal.customer_name}'s Visa Journey`}
+                </h4>
               </div>
               <button
                 onClick={() => setActiveVideoModal(null)}
-                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer"
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white cursor-pointer transition-colors"
+                aria-label="Close modal"
               >
                 <span className="material-symbols-outlined text-sm">close</span>
               </button>
             </div>
-            <div className="aspect-video bg-black flex items-center justify-center">
-              {activeVideoModal.video_url.includes('youtube') || activeVideoModal.video_url.includes('youtu.be') || activeVideoModal.video_url.includes('vimeo') ? (
+            <div className="aspect-video bg-black flex items-center justify-center relative">
+              {isVideoIframe(activeVideoModal.video_url) ? (
                 <iframe
                   src={getEmbedUrl(activeVideoModal.video_url)}
-                  title={activeVideoModal.customer_name}
+                  title={activeVideoModal.title || activeVideoModal.customer_name}
                   className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 ></iframe>
               ) : (
