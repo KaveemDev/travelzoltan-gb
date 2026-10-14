@@ -73,9 +73,11 @@ router.post('/live-approvals/reset-defaults', liveApprovalController.resetDefaul
 
 // Trust Content & Reviews & Video Testimonials
 router.get('/trust-content', trustContentController.getAdminTrustContent);
+router.get('/reviews', trustContentController.getAdminTrustContent);
 router.post('/reviews', trustContentController.createReview);
 router.put('/reviews/:id', trustContentController.updateReview);
 router.delete('/reviews/:id', trustContentController.deleteReview);
+router.get('/video-testimonials', trustContentController.getAdminTrustContent);
 router.post('/video-testimonials', trustContentController.createVideoTestimonial);
 router.put('/video-testimonials/:id', trustContentController.updateVideoTestimonial);
 router.delete('/video-testimonials/:id', trustContentController.deleteVideoTestimonial);
