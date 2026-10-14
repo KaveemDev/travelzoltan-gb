@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { visaAPI, trustAPI } from '../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://travelzoltan-gb.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
 
 // Speedometer Gauge Component modeled after the appointment availability meter
 // Speedometer Gauge Component modeled after the appointment availability meter

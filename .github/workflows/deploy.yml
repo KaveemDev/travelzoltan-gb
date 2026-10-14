@@ -43,8 +43,6 @@ jobs:
 
       - name: Build Vite application
         run: npm run build
-        env:
-          VITE_API_URL: https://travelzoltan-gb.onrender.com/api
 
       - name: Verify production build
         run: test -f dist/index.html

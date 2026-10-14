@@ -10,8 +10,6 @@ router.get('/visa-options', publicController.getVisaOptions);
 router.get('/visa-requirements', publicController.getVisaRequirements);
 router.get('/live-approvals', liveApprovalController.getPublicApprovals);
 router.get('/trust-content', trustContentController.getPublicTrustContent);
-router.get('/reviews', trustContentController.getPublicTrustContent);
-router.get('/video-testimonials', trustContentController.getPublicTrustContent);
 router.get('/appointment-slots', trustContentController.getPublicAppointmentSlots);
 
 // Form handling with multer - 'documents' is the field name for files

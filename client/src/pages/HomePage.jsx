@@ -4,7 +4,7 @@ import certificationImg from '../assets/certification.png';
 import ServicesValueSection from '../components/ServicesValueSection';
 import { trustAPI } from '../services/api';
 
-const API_URL = import.meta.env.VITE_API_URL || 'https://travelzoltan-gb.onrender.com/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
 
 // Smooth In-View Counter with cubic easing and live increment support
 const StatCounter = ({ end, decimals = 0, prefix = '', suffix = '', isIncrementing = false, duration = 1800 }) => {
