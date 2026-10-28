@@ -118,7 +118,7 @@ const getPublicTrustContent = async (req, res) => {
 const getPublicAppointmentSlots = async (req, res) => {
   try {
     await ensureTables();
-    const { destination } = req.query;
+    const { destination, citizenship } = req.query;
     let whereClause = { is_active: true };
 
     let slots = [];
@@ -156,7 +156,10 @@ const getPublicAppointmentSlots = async (req, res) => {
         const { VisaConfiguration } = require('../models');
         if (VisaConfiguration) {
           const matchingConfigs = await VisaConfiguration.findAll({
-            where: { destination: destination.trim() }
+            // appointment_data is per citizenship+destination pair; don't leak one pair's slots to others
+            where: citizenship
+              ? { destination: destination.trim(), citizenship: citizenship.trim() }
+              : { destination: destination.trim() }
           });
           const configSlots = [];
           for (const cfg of matchingConfigs) {

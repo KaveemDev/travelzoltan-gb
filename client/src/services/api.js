@@ -589,9 +589,9 @@ export const trustAPI = {
     }
   },
 
-  getPublicAppointmentSlots: async (destination) => {
+  getPublicAppointmentSlots: async (destination, citizenship) => {
     try {
-      const params = destination ? { destination } : {};
+      const params = destination ? { destination, ...(citizenship && { citizenship }) } : {};
       const response = await api.get('/appointment-slots', { params });
       return response.data;
     } catch (error) {

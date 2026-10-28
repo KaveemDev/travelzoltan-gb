@@ -284,7 +284,7 @@ const ChecklistPage = () => {
 
   const fetchAppointmentSlots = async () => {
     try {
-      const data = await trustAPI.getPublicAppointmentSlots(destination);
+      const data = await trustAPI.getPublicAppointmentSlots(destination, citizenship);
       if (data && data.appointmentSlots && data.appointmentSlots.length > 0) {
         setAppointmentSlots(data.appointmentSlots);
         setSelectedAppointmentDate(data.appointmentSlots[0]?.earliest_date || '');
