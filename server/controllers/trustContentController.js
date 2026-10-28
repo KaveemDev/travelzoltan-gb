@@ -162,8 +162,13 @@ const getPublicAppointmentSlots = async (req, res) => {
               : { destination: destination.trim() }
           });
           const configSlots = [];
+          const parseJson = (v) => { try { return typeof v === 'string' ? JSON.parse(v) : v; } catch { return null; } };
           for (const cfg of matchingConfigs) {
-            const appData = cfg.appointment_data || cfg.form_schema?.appointment_data;
+            const appData = parseJson(cfg.appointment_data) || parseJson(cfg.form_schema)?.appointment_data;
+            // Route toggle is authoritative: disabled means no appointment card, even if general slots match
+            if (citizenship && appData && appData.enabled !== true && appData.has_appointment !== true) {
+              return res.status(200).json({ success: true, appointmentSlots: [] });
+            }
             if (appData && (appData.enabled === true || appData.has_appointment === true)) {
               if (Array.isArray(appData.centers) && appData.centers.length > 0) {
                 appData.centers.forEach((c, idx) => {
