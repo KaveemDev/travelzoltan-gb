@@ -682,23 +682,48 @@ const ChecklistPage = () => {
                 </details>
               </div>
             ) : (
-              <div className="relative">
-                <div className="relative aspect-[4/3] rounded-[2rem] overflow-hidden shadow-2xl bg-gradient-to-br from-primary/80 via-primary to-secondary">
-                  {content.hero_image ? (
-                    <img src={content.hero_image} alt={destination} className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
-                      <span className="text-8xl apply-float" aria-hidden="true">{getCountryFlag(destination)}</span>
-                      <span className="mt-4 font-headline text-2xl font-extrabold">{destination}</span>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+              <div className="relative max-w-md mx-auto lg:max-w-none lg:pl-6">
+                {/* soft glow + tilted backing card for depth */}
+                <div aria-hidden="true" className="absolute -inset-6 rounded-[3rem] bg-gradient-to-br from-primary/25 via-primary/5 to-transparent blur-2xl" />
+                <div aria-hidden="true" className="absolute inset-0 lg:left-6 rounded-[2.25rem] bg-primary/10 rotate-3 translate-x-2 translate-y-2" />
+
+                <figure className="group relative p-2 bg-white rounded-[2.25rem] shadow-2xl shadow-primary/10 ring-1 ring-black/5">
+                  <div className="relative aspect-[4/5] max-h-[30rem] w-full rounded-[1.75rem] overflow-hidden bg-gradient-to-br from-primary/80 via-primary to-secondary">
+                    {content.hero_image ? (
+                      <img
+                        src={content.hero_image}
+                        alt={destination}
+                        loading="eager"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-9xl apply-float drop-shadow-xl" aria-hidden="true">{getCountryFlag(destination)}</span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+                    <figcaption className="absolute inset-x-0 bottom-0 p-5 sm:p-6 text-white">
+                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-white/80">
+                        <span className="material-symbols-outlined text-sm">location_on</span>Destination
+                      </span>
+                      <span className="mt-1 flex items-center gap-2 font-headline text-2xl font-extrabold leading-tight">
+                        <span aria-hidden="true">{getCountryFlag(destination)}</span>{destination}
+                      </span>
+                    </figcaption>
+                  </div>
+                </figure>
+
+                <div className="apply-float absolute top-6 -right-2 sm:-right-4 bg-white/95 backdrop-blur rounded-full shadow-lg pl-2 pr-4 py-2 flex items-center gap-2 text-sm font-semibold text-on-surface">
+                  <span className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                    <span className="material-symbols-outlined text-base">verified</span>
+                  </span>
+                  Expert reviewed
                 </div>
-                <div className="apply-float absolute -left-4 sm:-left-8 bottom-8 bg-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3" style={{ animationDelay: '-2s' }}>
+                <div className="apply-float absolute -left-3 lg:left-0 bottom-24 bg-white/95 backdrop-blur rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3" style={{ animationDelay: '-3s' }}>
                   <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
                     <span className="material-symbols-outlined">fact_check</span>
                   </span>
-                  <span className="text-sm">
+                  <span className="text-sm leading-tight">
                     <span className="block font-bold text-on-surface">{displayDocs.length} documents</span>
                     <span className="text-on-surface-variant">checked by experts</span>
                   </span>
