@@ -15,7 +15,7 @@ const TravelVisaAgreementPage = () => {
   };
 
   return (
-    <div className="min-h-screen bg-surface-lowest text-on-surface py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen text-on-surface py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-8">
         
         {/* Header Breadcrumb & Actions */}

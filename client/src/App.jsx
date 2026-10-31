@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-route
 import TopNavBar from './components/TopNavBar';
 import Footer from './components/Footer';
 import LiveVisaApprovals from './components/LiveVisaApprovals';
+import AnimatedBackground from './components/AnimatedBackground';
 import HomePage from './pages/HomePage';
 import ChecklistPage from './pages/ChecklistPage';
 import ApplicationProgressPage from './pages/ApplicationProgressPage';
@@ -38,10 +39,15 @@ function ScrollToTop() {
 function AppContent() {
   const { pathname } = useLocation();
   const isAdminPage = pathname === '/admin';
+  // the apply wizard has its own minimal top bar
+  const isApplyPage = pathname === '/apply';
+  // the apply wizard runs full-height with no header, and no approval toasts over its pinned Continue bar
+  const hideHeader = isAdminPage || isApplyPage;
 
   return (
-    <div className={`min-h-screen flex ${isAdminPage ? '' : 'flex-col'}`}>
-      {!isAdminPage && <TopNavBar />}
+    <div className={`relative isolate min-h-screen flex ${isAdminPage ? '' : 'flex-col'}`}>
+      {!isAdminPage && <AnimatedBackground />}
+      {!hideHeader && <TopNavBar />}
       <div className="flex-grow">
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -68,7 +74,7 @@ function AppContent() {
           <Route path="/travel-visa-agreement" element={<TravelVisaAgreementPage />} />
         </Routes>
       </div>
-      {!isAdminPage && <LiveVisaApprovals />}
+      {!isAdminPage && !isApplyPage && <LiveVisaApprovals />}
       {!isAdminPage && <Footer />}
     </div>
   );

@@ -1,6 +1,6 @@
 const CarRentalTermsPage = () => {
   return (
-    <div className="min-h-screen bg-slate-50 py-16 px-6 md:px-12 pt-30">
+    <div className="min-h-screen py-16 px-6 md:px-12 pt-30">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-4xl font-black text-on-surface mb-8 font-headline">Car Rental Terms</h1>
         

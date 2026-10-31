@@ -7,6 +7,8 @@ import {
 } from '../utils/paymentUtils';
 
 import { DOCUMENT_ICONS, DEFAULT_PERSONAL_DETAILS_FIELDS } from '../constants/visaConfig';
+import { APPLY_STEPS, DEFAULT_PURPOSES, DEFAULT_STATUSES } from '../constants/applyFlow';
+import { CHECKLIST_SECTIONS, DEFAULT_CHECKLIST_PAGE } from '../constants/checklistPage';
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -44,6 +46,61 @@ const ToggleSwitch = ({ checked, onChange, disabled = false, label, id }) => (
     />
   </button>
 );
+
+// Editable list of objects for the apply-page config (purposes, centres, packages)
+const ListEditor = ({ title, hint, items, fields, blank, onChange }) => {
+  const setField = (i, key, value) => onChange(items.map((it, j) => (j === i ? { ...it, [key]: value } : it)));
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h4 className="font-bold text-sm text-on-surface">{title}</h4>
+          <p className="text-xs text-outline mt-0.5">{hint}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange([...items, blank()])}
+          className="shrink-0 px-3 py-1.5 rounded-xl bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 cursor-pointer"
+        >
+          + Add
+        </button>
+      </div>
+      {items.map((item, i) => (
+        <div key={i} className="p-4 rounded-2xl border border-outline-variant/30 bg-surface-container-lowest grid sm:grid-cols-2 gap-3">
+          {fields.map(f => (
+            <label key={f.key} className={`block text-xs ${f.wide ? 'sm:col-span-2' : ''}`}>
+              <span className="block font-semibold text-on-surface mb-1">{f.label}</span>
+              {f.type === 'list' ? (
+                <textarea
+                  rows={3}
+                  value={(item[f.key] || []).join('\n')}
+                  onChange={e => setField(i, f.key, e.target.value.split('\n'))}
+                  placeholder="One per line"
+                  className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                />
+              ) : f.type === 'bool' ? (
+                <ToggleSwitch checked={!!item[f.key]} label={f.label} onChange={v => setField(i, f.key, v)} />
+              ) : (
+                <input
+                  type={f.type || 'text'}
+                  value={item[f.key] ?? ''}
+                  placeholder={f.placeholder}
+                  onChange={e => setField(i, f.key, e.target.value)}
+                  className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                />
+              )}
+            </label>
+          ))}
+          <div className="sm:col-span-2 flex justify-end">
+            <button type="button" onClick={() => onChange(items.filter((_, j) => j !== i))} className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer">
+              Remove
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const VisaConfigModal = ({
   isOpen,
@@ -105,6 +162,33 @@ const VisaConfigModal = ({
         [field]: newValue
       }
     }));
+  };
+
+  // Apply page (/apply) wizard config, stored in form_schema.apply_flow
+  const applyFlow = configForm.form_schema?.apply_flow || {};
+  const updateApplyFlow = (patch) => {
+    setConfigForm(prev => ({
+      ...prev,
+      form_schema: {
+        ...(prev.form_schema || {}),
+        apply_flow: { ...(prev.form_schema?.apply_flow || {}), ...patch }
+      }
+    }));
+  };
+  // Checklist page (/checklist) copy, stored in form_schema.checklist_page
+  const checklistPage = configForm.form_schema?.checklist_page || {};
+  const updateChecklistPage = (patch) => {
+    setConfigForm(prev => ({
+      ...prev,
+      form_schema: {
+        ...(prev.form_schema || {}),
+        checklist_page: { ...(prev.form_schema?.checklist_page || {}), ...patch }
+      }
+    }));
+  };
+
+  const updateApplyStep = (key, field, value) => {
+    updateApplyFlow({ steps: { ...(applyFlow.steps || {}), [key]: { ...(applyFlow.steps?.[key] || {}), [field]: value } } });
   };
 
   // Form schema update helper
@@ -297,6 +381,19 @@ const VisaConfigModal = ({
                 label: 'Required Documents', 
                 icon: 'folder_managed', 
                 badge: totalDocsOverall > 0 ? `${totalDocsOverall} items` : null 
+              },
+ 
+              {
+                id: 'checklist',
+                label: 'Checklist Page',
+                icon: 'checklist',
+                badge: `${CHECKLIST_SECTIONS.filter(sec => checklistPage.sections?.[sec.key] !== false).length} sections`
+              },
+              {
+                id: 'apply',
+                label: 'Apply Page',
+                icon: 'linear_scale',
+                badge: `${APPLY_STEPS.filter(st => st.locked || applyFlow.steps?.[st.key]?.enabled !== false).length} steps`
               },
               { 
                 id: 'appointment', 
@@ -1099,6 +1196,206 @@ const VisaConfigModal = ({
                 )}
               </div>
 
+            </div>
+          )}
+
+          {/* TAB: CHECKLIST PAGE CONTENT */}
+          {activeTab === 'checklist' && (
+            <div className="space-y-8 max-w-4xl mx-auto py-2">
+              <p className="text-xs text-outline">
+                Text shown on this route’s checklist page. Leave a field blank to use the default (shown greyed).
+                Use {'{destination}'} and {'{citizenship}'} to insert the route’s names. Trip purposes and applicant
+                statuses come from the Apply Page tab; documents from Required Documents.
+              </p>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-on-surface">Sections</h4>
+                {CHECKLIST_SECTIONS.map(sec => {
+                  const on = checklistPage.sections?.[sec.key] !== false;
+                  return (
+                    <div key={sec.key} className="flex items-center justify-between p-3 rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+                      <span className="text-sm font-semibold text-on-surface">{sec.label}</span>
+                      <div className="flex items-center gap-2 text-xs font-semibold">
+                        <ToggleSwitch
+                          id={`checklist-section-${sec.key}`}
+                          label={`Show ${sec.label}`}
+                          checked={on}
+                          onChange={v => updateChecklistPage({ sections: { ...(checklistPage.sections || {}), [sec.key]: v } })}
+                        />
+                        <span className={on ? 'text-on-surface' : 'text-outline'}>{on ? 'Shown' : 'Hidden'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {[
+                { title: 'Hero', fields: [['hero_eyebrow', 'Small label'], ['hero_title', 'Title'], ['hero_highlight', 'Highlighted end of title'], ['hero_subtitle', 'Subtitle', true], ['hero_image', 'Image URL (shown when no appointment card)', true]] },
+                { title: 'What are you travelling for?', fields: [['purpose_heading', 'Heading'], ['purpose_subtitle', 'Subtitle']] },
+                { title: 'What you’ll typically need', fields: [['documents_heading', 'Heading'], ['documents_subtitle', 'Subtitle']] },
+                { title: 'Avoid the common mistakes', fields: [['mistakes_heading', 'Heading'], ['mistakes_subtitle', 'Subtitle']] }
+              ].map(group => (
+                <div key={group.title} className="space-y-3">
+                  <h4 className="font-bold text-sm text-on-surface">{group.title}</h4>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {group.fields.map(([key, name, wide]) => (
+                      <label key={key} className={`block text-xs ${wide ? 'sm:col-span-2' : ''}`}>
+                        <span className="block font-semibold text-on-surface mb-1">{name}</span>
+                        <input
+                          value={checklistPage[key] || ''}
+                          placeholder={DEFAULT_CHECKLIST_PAGE[key] || 'https://…'}
+                          onChange={e => updateChecklistPage({ [key]: e.target.value })}
+                          className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <label className="block text-xs">
+                <span className="block font-semibold text-on-surface mb-1">Hero ticks</span>
+                <textarea
+                  rows={3}
+                  value={(checklistPage.hero_points || []).join('\n')}
+                  placeholder={DEFAULT_CHECKLIST_PAGE.hero_points.join('\n')}
+                  onChange={e => updateChecklistPage({ hero_points: e.target.value.split('\n') })}
+                  className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <ListEditor
+                title="Common mistakes"
+                hint="Each item opens to show its description and how you help."
+                items={checklistPage.mistakes?.length ? checklistPage.mistakes : DEFAULT_CHECKLIST_PAGE.mistakes}
+                blank={() => ({ title: '', description: '', tip: '' })}
+                onChange={mistakes => updateChecklistPage({ mistakes })}
+                fields={[
+                  { key: 'title', label: 'Title', wide: true },
+                  { key: 'description', label: 'Description', wide: true },
+                  { key: 'tip', label: 'How we help', wide: true }
+                ]}
+              />
+            </div>
+          )}
+
+          {/* TAB 6: APPLY PAGE WIZARD */}
+          {activeTab === 'apply' && (
+            <div className="space-y-8 max-w-4xl mx-auto py-2">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="font-bold text-sm text-on-surface">Steps</h4>
+                  <p className="text-xs text-outline mt-0.5">
+                    Switch steps off to remove them from the apply page. Leave text blank to use the default. Centre and Support
+                    are also skipped automatically when they have no options; Documents when the route has no documents.
+                    Status and Purpose also follow the Applicant Status / Visa Category switches in Form Schema, and the
+                    Details step shows the fields switched on there.
+                  </p>
+                </div>
+                {APPLY_STEPS.map(st => {
+                  const o = applyFlow.steps?.[st.key] || {};
+                  const enabled = st.locked || o.enabled !== false;
+                  return (
+                    <div key={st.key} className={`p-4 rounded-2xl border border-outline-variant/30 ${enabled ? 'bg-surface-container-lowest' : 'bg-surface-container-low/60 opacity-70'}`}>
+                      <div className="flex items-center justify-between gap-3 mb-3">
+                        <span className="font-bold text-sm text-on-surface">{st.label}</span>
+                        <div className="flex items-center gap-2 text-xs font-semibold">
+                          {st.locked ? (
+                            <span className="text-outline italic">Always shown</span>
+                          ) : (
+                            <>
+                              <ToggleSwitch
+                                id={`apply-step-${st.key}`}
+                                label={`Show ${st.label} step`}
+                                checked={enabled}
+                                onChange={v => updateApplyStep(st.key, 'enabled', v)}
+                              />
+                              <span className={enabled ? 'text-on-surface' : 'text-outline'}>{enabled ? 'Shown' : 'Removed'}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {enabled && (
+                        <div className="grid sm:grid-cols-3 gap-3 text-xs">
+                          {[
+                            { field: 'label', name: 'Stepper label' },
+                            { field: 'heading', name: 'Heading' },
+                            { field: 'subtitle', name: 'Subtitle' }
+                          ].map(({ field, name }) => (
+                            <label key={field} className="block">
+                              <span className="block font-semibold text-on-surface mb-1">{name}</span>
+                              <input
+                                value={o[field] || ''}
+                                placeholder={st[field]}
+                                onChange={e => updateApplyStep(st.key, field, e.target.value)}
+                                className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <ListEditor
+                title="Applicant statuses"
+                hint="Key must match an applicant category in Required Documents (employed, self_employed, student, unemployed, retired) so the right documents are asked for."
+                items={applyFlow.statuses?.length ? applyFlow.statuses : DEFAULT_STATUSES}
+                blank={() => ({ key: '', label: '', description: '', icon: 'person' })}
+                onChange={statuses => updateApplyFlow({ statuses })}
+                fields={[
+                  { key: 'key', label: 'Key (applicant category)' },
+                  { key: 'label', label: 'Title' },
+                  { key: 'description', label: 'Description' },
+                  { key: 'icon', label: 'Icon' }
+                ]}
+              />
+
+              <ListEditor
+                title="Trip purposes"
+                hint="Key must match a visa category in Required Documents (e.g. tourist, business, family) so the right documents are asked for. Icon is a Material Symbols name."
+                items={applyFlow.purposes?.length ? applyFlow.purposes : DEFAULT_PURPOSES}
+                blank={() => ({ key: '', label: '', description: '', icon: 'flight_takeoff', points: [] })}
+                onChange={purposes => updateApplyFlow({ purposes })}
+                fields={[
+                  { key: 'key', label: 'Key (visa category)' },
+                  { key: 'label', label: 'Title' },
+                  { key: 'description', label: 'Description' },
+                  { key: 'icon', label: 'Icon' },
+                  { key: 'points', label: 'Bullet points', type: 'list', wide: true }
+                ]}
+              />
+
+              <ListEditor
+                title="Application centres"
+                hint="Leave empty to use the centres from Appointment Availability. With no centres at all, the Centre step is skipped."
+                items={applyFlow.centres || []}
+                blank={() => ({ name: '', description: '' })}
+                onChange={centres => updateApplyFlow({ centres })}
+                fields={[
+                  { key: 'name', label: 'Centre name', placeholder: 'London' },
+                  { key: 'description', label: 'Description', placeholder: 'Interview at the U.S. Embassy' }
+                ]}
+              />
+
+              <ListEditor
+                title="Support packages"
+                hint="Prices are in GBP per traveller and are what the customer is charged. With no packages, the Support step is skipped and the Commercials fee is used."
+                items={applyFlow.packages || []}
+                blank={() => ({ key: `pkg-${Date.now()}`, tag: '', title: '', price: '', pay_now_amount: '', badge: '', highlight: false, points: [] })}
+                onChange={packages => updateApplyFlow({ packages })}
+                fields={[
+                  { key: 'tag', label: 'Tag', placeholder: 'ADVANCE' },
+                  { key: 'title', label: 'Title', placeholder: 'End to end visa assistance' },
+                  { key: 'price', label: 'Price per traveller (£)', type: 'number' },
+                  { key: 'pay_now_amount', label: 'Deposit today (£, optional)', type: 'number' },
+                  { key: 'badge', label: 'Badge (optional)', placeholder: 'Most popular' },
+                  { key: 'highlight', label: 'Highlight (dark card)', type: 'bool' },
+                  { key: 'points', label: 'What is included', type: 'list', wide: true }
+                ]}
+              />
             </div>
           )}
 

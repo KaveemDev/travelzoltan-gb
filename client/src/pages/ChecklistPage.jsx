@@ -1,8 +1,32 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { visaAPI, trustAPI } from '../services/api';
+import { getApplyFlow } from '../constants/applyFlow';
+import { getChecklistContent } from '../constants/checklistPage';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.zoltanvisa.com/api';
+
+// Fades a section up the first time it scrolls into view (motion is off under prefers-reduced-motion)
+const Reveal = ({ children, className = '', ...rest }) => {
+  const ref = useRef(null);
+  const [shown, setShown] = useState(typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (shown || !ref.current) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) {
+        setShown(true);
+        io.disconnect();
+      }
+    }, { threshold: 0.12 });
+    io.observe(ref.current);
+    return () => io.disconnect();
+  }, [shown]);
+  return <section ref={ref} className={`${className} ${shown ? 'apply-rise' : 'opacity-0'}`} {...rest}>{children}</section>;
+};
+
+const Eyebrow = ({ children }) => (
+  <p className="text-xs font-bold tracking-[0.18em] uppercase text-primary">{children}</p>
+);
 
 // Speedometer Gauge Component modeled after the appointment availability meter
 // Speedometer Gauge Component modeled after the appointment availability meter
@@ -156,19 +180,6 @@ const AppointmentSpeedometer = ({ days = 12, maxDays = 90 }) => {
   );
 };
 
-const countryCodes = [
-  { code: '+44', country: 'UK', flag: '🇬🇧' },
-  { code: '+1', country: 'US/CA', flag: '🇺🇸' },
-  { code: '+91', country: 'IN', flag: '🇮🇳' },
-  { code: '+971', country: 'AE', flag: '🇦🇪' },
-  { code: '+61', country: 'AU', flag: '🇦🇺' },
-  { code: '+49', country: 'DE', flag: '🇩🇪' },
-  { code: '+33', country: 'FR', flag: '🇫🇷' },
-  { code: '+39', country: 'IT', flag: '🇮🇹' },
-  { code: '+34', country: 'ES', flag: '🇪🇸' },
-  { code: '+65', country: 'SG', flag: '🇸🇬' }
-];
-
 const ChecklistPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
@@ -208,11 +219,7 @@ const ChecklistPage = () => {
   const [tempCitizenship, setTempCitizenship] = useState(citizenship);
   const [tempDestination, setTempDestination] = useState(destination);
 
-  // Quick Consultation Drawer / State
-  const [showQuickConsultModal, setShowQuickConsultModal] = useState(false);
-  const [consultName, setConsultName] = useState('');
-  const [consultPhone, setConsultPhone] = useState('');
-  const [consultSubmitted, setConsultSubmitted] = useState(false);
+  const [openMistake, setOpenMistake] = useState(0);
 
   // Fetch available route options for the switcher
   useEffect(() => {
@@ -361,16 +368,6 @@ const ChecklistPage = () => {
   const badgeText = activeCenter?.slots_status || appointmentConfig?.badge_text || (availableCenters.length > 0 ? `${availableCenters.length} slots available for ${earliestDate}!` : '');
   const daysUntil = Number(activeCenter?.days_until ?? appointmentConfig?.days_until ?? 12) || 12;
 
-  const earlierCountries = useMemo(() => {
-    if (appointmentConfig?.earlier_countries && appointmentConfig.earlier_countries.length > 0) {
-      return appointmentConfig.earlier_countries;
-    }
-    if (appointmentSlots?.[0]?.earlier_countries && appointmentSlots[0].earlier_countries.length > 0) {
-      return appointmentSlots[0].earlier_countries;
-    }
-    return ['Austria', 'Switzerland', 'Germany', 'Finland', 'France', 'Croatia', 'Iceland', 'Netherlands', 'Portugal', 'Sweden'];
-  }, [appointmentConfig, appointmentSlots]);
-
   const handleApplyNewRoute = (e) => {
     e.preventDefault();
     if (tempCitizenship && tempDestination) {
@@ -438,20 +435,10 @@ const ChecklistPage = () => {
     return '🌍';
   };
 
-  // Categories list
-  const applicantCategories = [
-    { key: 'employed', label: 'Employed', icon: 'work' },
-    { key: 'self_employed', label: 'Self-Employed / Director', icon: 'domain' },
-    { key: 'student', label: 'Student', icon: 'school' },
-    { key: 'unemployed', label: 'Unemployed / Dependent', icon: 'person' },
-    { key: 'retired', label: 'Retired', icon: 'elderly' }
-  ];
-
-  const visaCategories = [
-    { key: 'tourist', label: 'Tourist / Holiday', icon: 'beach_access' },
-    { key: 'business', label: 'Business / Conference', icon: 'business_center' },
-    { key: 'family', label: 'Visiting Family / Friend', icon: 'group' }
-  ];
+  // Statuses, purposes and page copy all come from the route's configuration (shared with /apply)
+  const flow = getApplyFlow(visaData?.form_schema, visaData?.appointment_data);
+  const content = getChecklistContent(visaData?.form_schema, { destination, citizenship });
+  const activePurpose = flow.purposes.find(p => p.key === selectedVisaCategory) || flow.purposes[0];
 
   // Extract clean list of required documents for selected category
   const fallbackDocs = [
@@ -484,8 +471,23 @@ const ChecklistPage = () => {
   const checkedCount = displayDocs.filter(d => checkedDocs[d.name]).length;
   const progressPercent = displayDocs.length > 0 ? Math.round((checkedCount / displayDocs.length) * 100) : 0;
 
+  const primaryCta = 'group inline-flex items-center gap-3 bg-on-surface text-white font-bold pl-6 pr-2 py-2 rounded-full shadow-lg hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] transition duration-300 cursor-pointer';
+  const ctaArrow = (
+    <span className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center transition duration-300 group-hover:translate-x-0.5 group-hover:bg-primary">
+      <span className="material-symbols-outlined text-lg">arrow_forward</span>
+    </span>
+  );
+
+  if (loading && !visaData) {
+    return (
+      <main className="pt-24 min-h-screen flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+      </main>
+    );
+  }
+
   return (
-    <main className="pt-24 min-h-screen bg-slate-50/60 pb-16">
+    <main className="pt-24 min-h-screen pb-20">
       {/* Route Switcher Modal */}
       {isEditingRoute && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 animate-dialog-appear">
@@ -494,6 +496,7 @@ const ChecklistPage = () => {
               <h3 className="font-headline font-bold text-lg text-slate-900">Change Visa Destination</h3>
               <button
                 onClick={() => setIsEditingRoute(false)}
+                aria-label="Close"
                 className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 cursor-pointer"
               >
                 <span className="material-symbols-outlined text-base">close</span>
@@ -501,48 +504,31 @@ const ChecklistPage = () => {
             </div>
 
             <form onSubmit={handleApplyNewRoute} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Your Passport / Citizenship
-                </label>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Your Passport / Citizenship</span>
                 <select
                   value={tempCitizenship}
                   onChange={(e) => setTempCitizenship(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  {allCitizenships.map(c => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
+                  {allCitizenships.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
-                  Destination Country
-                </label>
+              </label>
+              <label className="block">
+                <span className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Destination Country</span>
                 <select
                   value={tempDestination}
                   onChange={(e) => setTempDestination(e.target.value)}
                   className="w-full p-3 rounded-xl border border-slate-300 bg-slate-50 text-sm font-semibold outline-none focus:ring-2 focus:ring-primary/20"
                 >
-                  {allDestinations.map(d => (
-                    <option key={d} value={d}>{d}</option>
-                  ))}
+                  {allDestinations.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-              </div>
-
+              </label>
               <div className="pt-2 flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsEditingRoute(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer"
-                >
+                <button type="button" onClick={() => setIsEditingRoute(false)} className="flex-1 py-2.5 rounded-xl border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">
                   Cancel
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-md shadow-primary/20 hover:opacity-95 cursor-pointer"
-                >
+                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-primary text-white text-xs font-bold shadow-md shadow-primary/20 hover:opacity-95 cursor-pointer">
                   Update Checklist
                 </button>
               </div>
@@ -552,421 +538,381 @@ const ChecklistPage = () => {
       )}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Streamlined Clean Header Banner */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-sm mb-6 mt-2">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 font-bold text-xs border border-emerald-200 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  Verified Consulate Checklist
-                </span>
-                <span className="px-3 py-1 rounded-full bg-primary/10 text-primary font-bold text-xs">
-                  2025/2026 Season
-                </span>
-              </div>
+        {error && (
+          <p role="alert" className="mt-4 p-3 rounded-xl bg-error/10 text-error text-sm font-semibold text-center">
+            We couldn’t load the latest requirements. Showing our standard checklist instead.
+          </p>
+        )}
 
-              <h1 className="font-headline text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">
-                Visa Requirements for{' '}
-                <span className="text-primary">{destination}</span>
+        {/* ---------- Hero ---------- */}
+        <section className="grid lg:grid-cols-12 gap-10 items-center pt-8 pb-16">
+          <div className="lg:col-span-7 space-y-6">
+            <nav aria-label="Breadcrumb" className="apply-rise text-xs text-on-surface-variant flex items-center gap-1.5">
+              <Link to="/" className="hover:text-primary transition-colors">Home</Link>
+              <span aria-hidden="true">/</span>
+              <span>Visa checklist</span>
+              <span aria-hidden="true">/</span>
+              <span className="text-on-surface font-semibold">{destination}</span>
+            </nav>
+
+            <div className="apply-rise space-y-4" style={{ '--i': 1 }}>
+              <Eyebrow>{content.hero_eyebrow}</Eyebrow>
+              <h1 className="font-headline text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05] text-on-surface">
+                {content.hero_title} <span className="text-primary">{content.hero_highlight}</span>
               </h1>
-
-              <div className="flex items-center gap-3 text-xs sm:text-sm text-slate-600 font-medium">
-                <span className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-full text-slate-800">
-                  <span>{getCountryFlag(citizenship)}</span>
-                  <span>{citizenship} Passport</span>
-                </span>
-                <span className="material-symbols-outlined text-sm text-slate-400">arrow_forward</span>
-                <span className="flex items-center gap-1.5 bg-slate-100 px-3 py-1 rounded-full text-slate-800">
-                  <span>{getCountryFlag(destination)}</span>
-                  <span>{destination}</span>
-                </span>
-              </div>
+              <p className="text-on-surface-variant sm:text-lg max-w-xl">{content.hero_subtitle}</p>
             </div>
 
-            <button
-              onClick={() => {
-                setTempCitizenship(citizenship);
-                setTempDestination(destination);
-                setIsEditingRoute(true);
-              }}
-              className="self-start md:self-auto px-4 py-2.5 rounded-xl border border-slate-300 hover:border-primary text-slate-700 hover:text-primary text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer bg-white shadow-xs"
-            >
-              <span className="material-symbols-outlined text-sm">edit</span>
-              Change Destination
-            </button>
+            <div className="apply-rise flex flex-wrap items-center gap-2 text-sm" style={{ '--i': 2 }}>
+              <span className="flex items-center gap-1.5 bg-white/80 border border-outline-variant/30 px-3 py-1.5 rounded-full font-semibold">
+                <span aria-hidden="true">{getCountryFlag(citizenship)}</span>{citizenship}
+              </span>
+              <span className="material-symbols-outlined text-base text-on-surface-variant" aria-hidden="true">arrow_forward</span>
+              <span className="flex items-center gap-1.5 bg-white/80 border border-outline-variant/30 px-3 py-1.5 rounded-full font-semibold">
+                <span aria-hidden="true">{getCountryFlag(destination)}</span>{destination}
+              </span>
+              <button
+                onClick={() => {
+                  setTempCitizenship(citizenship);
+                  setTempDestination(destination);
+                  setIsEditingRoute(true);
+                }}
+                className="ml-1 text-primary font-semibold underline underline-offset-4 decoration-primary/30 hover:decoration-primary transition-colors cursor-pointer"
+              >
+                Change
+              </button>
+            </div>
+
+            <div className="apply-rise flex flex-wrap items-center gap-3" style={{ '--i': 3 }}>
+              <button onClick={handleStartApplication} className={primaryCta}>
+                Start your application{ctaArrow}
+              </button>
+              <button
+                onClick={() => handleOpenWhatsApp()}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-outline-variant/50 bg-white/70 backdrop-blur font-bold text-on-surface hover:border-primary hover:text-primary transition cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-lg">chat</span>
+                Talk to a visa expert
+              </button>
+            </div>
+
+            {content.hero_points.length > 0 && (
+              <ul className="apply-rise flex flex-wrap gap-x-5 gap-y-2 text-sm text-on-surface-variant" style={{ '--i': 4 }}>
+                {content.hero_points.map(pt => (
+                  <li key={pt} className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[18px] text-primary">check_circle</span>{pt}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
-        </div>
 
-        {/* Available Appointment Card - Controlled from backend (only shown if configured) */}
-        {hasAppointment && (
-          <div className="w-full bg-white rounded-3xl border border-slate-200/90 shadow-sm mb-6 transition-all overflow-hidden">
-            {/* Top Bar with Urgency Pill */}
-            <div className="px-6 pt-6 sm:px-8 sm:pt-8 flex items-center justify-between flex-wrap gap-3">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-bold shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>{badgeText || `Available slots for ${earliestDate}!`}</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold">
-                <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>
-                <span>Live Consular Quota</span>
-              </div>
-            </div>
-
-            {/* Main Content: Responsive 2-column grid on desktop, natural stack on mobile */}
-            <div className="p-6 sm:p-8 pt-4 sm:pt-5 grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-              {/* Left Column: Details & Action */}
-              <div className="lg:col-span-7 flex flex-col justify-between space-y-5">
-                <div>
-                  <h3 className="font-headline text-2xl sm:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-                    Visa Appointment as Early as{' '}
-                    <span className="text-[#4f46e5] font-black">{earliestDate}</span>
-                  </h3>
-                  <p className="text-xs sm:text-sm text-slate-500 mt-1.5">
-                    Official embassy & biometrics appointments currently open for {destination}.
-                  </p>
+          {/* Right: live appointment card when configured, otherwise a visual */}
+          <div className="lg:col-span-5 apply-rise" style={{ '--i': 2 }}>
+            {hasAppointment ? (
+              <div className="bg-white rounded-3xl border border-outline-variant/30 shadow-xl p-6 space-y-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-bold">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    {badgeText || `Available slots for ${earliestDate}`}
+                  </span>
+                  <span className="text-xs text-on-surface-variant font-semibold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-sm text-emerald-600">verified</span>Live consular quota
+                  </span>
                 </div>
-
-                {/* Appointment Location Dropdown */}
-                <div className="space-y-1.5">
-                  <label className="block text-xs font-bold text-slate-700">
-                    Appointment Location
-                  </label>
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-[#4f46e5]">
-                      <span className="material-symbols-outlined text-xl">location_on</span>
-                    </div>
-                    <select
-                      value={selectedLocation || (availableCenters[0]?.city || '')}
-                      onChange={(e) => {
-                        const loc = e.target.value;
-                        setSelectedLocation(loc);
-                        const found = availableCenters.find((c) => (c.city || '').toLowerCase() === loc.toLowerCase());
-                        if (found && found.earliest_date) {
-                          setSelectedAppointmentDate(found.earliest_date);
-                        }
-                      }}
-                      className="w-full pl-11 pr-10 py-3.5 rounded-2xl bg-slate-50/80 hover:bg-slate-100/70 border border-slate-200 text-slate-900 text-sm font-bold appearance-none cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/20 focus:border-[#4f46e5] transition-all shadow-2xs"
-                    >
-                      {availableCenters.map((center, idx) => (
-                        <option key={idx} value={center.city}>
-                          {center.city} {center.center_name ? `(${center.center_name})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none text-slate-400">
-                      <span className="material-symbols-outlined text-lg">expand_more</span>
-                    </div>
+                <div className="grid grid-cols-5 items-center gap-2">
+                  <div className="col-span-3">
+                    <p className="text-sm text-on-surface-variant">Appointments as early as</p>
+                    <p className="font-headline text-2xl font-extrabold text-on-surface leading-tight">{earliestDate}</p>
+                  </div>
+                  <div className="col-span-2 -my-4">
+                    <AppointmentSpeedometer days={daysUntil} maxDays={90} />
                   </div>
                 </div>
-
-                {/* Reserve Appointment CTA Button */}
+                <label className="block">
+                  <span className="block text-xs font-bold text-on-surface mb-1.5">Appointment location</span>
+                  <select
+                    value={selectedLocation || (availableCenters[0]?.city || '')}
+                    onChange={(e) => {
+                      const loc = e.target.value;
+                      setSelectedLocation(loc);
+                      const found = availableCenters.find((c) => (c.city || '').toLowerCase() === loc.toLowerCase());
+                      if (found && found.earliest_date) setSelectedAppointmentDate(found.earliest_date);
+                    }}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 border border-outline-variant/40 text-sm font-semibold cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition"
+                  >
+                    {availableCenters.map((center, idx) => (
+                      <option key={idx} value={center.city}>
+                        {center.city} {center.center_name ? `(${center.center_name})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <button
                   type="button"
                   onClick={() => {
                     setIsAppointmentReserved(true);
-                    if (!selectedAppointmentDate && earliestDate) {
-                      setSelectedAppointmentDate(earliestDate);
-                    }
+                    if (!selectedAppointmentDate && earliestDate) setSelectedAppointmentDate(earliestDate);
                   }}
-                  className={`w-full py-4 px-6 rounded-2xl font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 transition-all cursor-pointer shadow-md ${
-                    isAppointmentReserved
-                      ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25 ring-2 ring-emerald-600/30'
-                      : 'bg-[#4f46e5] hover:bg-[#4338ca] text-white shadow-[#4f46e5]/25 active:scale-[0.99]'
+                  className={`w-full py-3.5 rounded-2xl font-bold flex items-center justify-center gap-2 transition duration-300 cursor-pointer active:scale-[0.99] ${
+                    isAppointmentReserved ? 'bg-emerald-600 text-white' : 'bg-primary text-white shadow-lg shadow-primary/25 hover:-translate-y-0.5'
                   }`}
                 >
-                  <span className="material-symbols-outlined text-xl">
+                  <span className={`material-symbols-outlined text-xl ${isAppointmentReserved ? 'apply-pop' : ''}`}>
                     {isAppointmentReserved ? 'check_circle' : 'event_available'}
                   </span>
-                  <span>
-                    {isAppointmentReserved
-                      ? `Appointment Reserved for ${earliestDate}`
-                      : 'Reserve Appointment Now'}
-                  </span>
+                  {isAppointmentReserved ? `Appointment reserved for ${earliestDate}` : 'Reserve appointment now'}
                 </button>
-
-                {/* Optional Custom Target Travel Date Accordion */}
-                <div className="pt-1">
-                  <details className="group inline-block text-left">
-                    <summary className="text-[11px] font-bold text-[#4f46e5] hover:underline cursor-pointer list-none flex items-center gap-1">
-                      <span>Need a different target travel date?</span>
-                      <span className="material-symbols-outlined text-xs group-open:rotate-180 transition-transform">expand_more</span>
-                    </summary>
-                    <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-slate-200/80 flex items-center gap-3">
-                      <label className="text-xs text-slate-600 font-medium">Target Date:</label>
-                      <input
-                        type="date"
-                        min={new Date().toISOString().split('T')[0]}
-                        value={customAppointmentDate}
-                        onChange={(e) => setCustomAppointmentDate(e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-semibold text-slate-800 bg-white"
-                      />
-                    </div>
-                  </details>
-                </div>
-              </div>
-
-              {/* Right Column: Speedometer Dial Gauge Meter */}
-              <div className="lg:col-span-5 flex flex-col items-center justify-center bg-slate-50/70 rounded-3xl p-6 border border-slate-100/90 shadow-2xs">
-                <AppointmentSpeedometer days={daysUntil} maxDays={90} />
-              </div>
-            </div>
-
-            {/* Bottom Section: Earlier Appointments in other countries */}
-            {/* {earlierCountries && earlierCountries.length > 0 && (
-              <div className="border-t border-slate-100 bg-slate-50/40 px-6 sm:px-8 py-5">
-                <div className="space-y-3 text-center sm:text-left">
-                  <p className="text-xs sm:text-sm font-bold text-slate-800 flex items-center justify-center sm:justify-start gap-1.5">
-                    <span className="material-symbols-outlined text-[#4f46e5] text-base">flight_takeoff</span>
-                    Earlier appointments available for these countries from {selectedLocation || destination}
-                  </p>
-                  <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                    {earlierCountries.map((country, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => {
-                          setTempDestination(country);
-                          setDestination(country);
-                        }}
-                        className="px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 text-xs font-semibold border border-slate-200/80 transition-all cursor-pointer shadow-2xs hover:border-slate-300"
-                      >
-                        {country}
-                      </button>
-                    ))}
+                <details className="group">
+                  <summary className="text-xs font-bold text-primary hover:underline cursor-pointer list-none flex items-center gap-1">
+                    Need a different target travel date?
+                    <span className="material-symbols-outlined text-xs group-open:rotate-180 transition-transform">expand_more</span>
+                  </summary>
+                  <div className="mt-2 p-3 bg-slate-50 rounded-xl border border-outline-variant/30 flex items-center gap-3">
+                    <label htmlFor="targetDate" className="text-xs text-on-surface-variant font-medium">Target date</label>
+                    <input
+                      id="targetDate"
+                      type="date"
+                      min={new Date().toISOString().split('T')[0]}
+                      value={customAppointmentDate}
+                      onChange={(e) => setCustomAppointmentDate(e.target.value)}
+                      className="px-2.5 py-1.5 rounded-lg border border-outline-variant/50 text-xs font-semibold bg-white"
+                    />
                   </div>
+                </details>
+              </div>
+            ) : (
+              <div className="relative">
+                <div className="relative aspect-[4/3] rounded-[2rem] overflow-hidden shadow-2xl bg-gradient-to-br from-primary/80 via-primary to-secondary">
+                  {content.hero_image ? (
+                    <img src={content.hero_image} alt={destination} className="absolute inset-0 w-full h-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-white">
+                      <span className="text-8xl apply-float" aria-hidden="true">{getCountryFlag(destination)}</span>
+                      <span className="mt-4 font-headline text-2xl font-extrabold">{destination}</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
+                </div>
+                <div className="apply-float absolute -left-4 sm:-left-8 bottom-8 bg-white rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3" style={{ animationDelay: '-2s' }}>
+                  <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                    <span className="material-symbols-outlined">fact_check</span>
+                  </span>
+                  <span className="text-sm">
+                    <span className="block font-bold text-on-surface">{displayDocs.length} documents</span>
+                    <span className="text-on-surface-variant">checked by experts</span>
+                  </span>
                 </div>
               </div>
-            )} */}
+            )}
           </div>
-        )}
+        </section>
 
-        {/* Simplified Filter Bar: Applicant Status & Travel Purpose */}
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200/90 shadow-xs mb-6">
-          <div className="space-y-4">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                1. Select Your Applicant Status:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {applicantCategories.map((cat) => {
-                  const isSelected = selectedCategory === cat.key;
-                  return (
-                    <button
-                      key={cat.key}
-                      onClick={() => setSelectedCategory(cat.key)}
-                      className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-primary text-white shadow-sm ring-2 ring-primary/30'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm">{cat.icon}</span>
-                      <span>{cat.label}</span>
-                      {isSelected && <span className="material-symbols-outlined text-xs">check</span>}
-                    </button>
-                  );
-                })}
-              </div>
+        {/* ---------- What are you travelling for? ---------- */}
+        {content.show.purposes && flow.purposes.length > 0 && (
+          <Reveal className="py-14" aria-labelledby="purpose-heading">
+            <div className="text-center max-w-2xl mx-auto mb-10 space-y-3">
+              <Eyebrow>Trip type</Eyebrow>
+              <h2 id="purpose-heading" className="font-headline text-3xl sm:text-4xl font-extrabold tracking-tight text-on-surface">{content.purpose_heading}</h2>
+              <p className="text-on-surface-variant">{content.purpose_subtitle}</p>
             </div>
 
-            <div className="pt-3 border-t border-slate-100">
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">
-                2. Travel Purpose:
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {visaCategories.map((vc) => {
-                  const isSelected = selectedVisaCategory === vc.key;
-                  return (
-                    <button
-                      key={vc.key}
-                      onClick={() => setSelectedVisaCategory(vc.key)}
-                      className={`px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-slate-900 text-white shadow-sm'
-                          : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-sm">{vc.icon}</span>
-                      <span>{vc.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main 2-Column Responsive Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Column: Clean, Simple Required Documents Checklist */}
-          <div className="lg:col-span-8 bg-white rounded-3xl p-6 sm:p-8 border border-slate-200/90 shadow-xs space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="font-headline font-bold text-lg sm:text-xl text-slate-900">
-                  Required Documents Checklist
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Click items to mark what you have ready
-                </p>
-              </div>
-
-              {/* Simple Progress Counter */}
-              <div className="flex items-center gap-2 bg-slate-100 px-3.5 py-1.5 rounded-full text-xs font-bold text-slate-700">
-                <span>{checkedCount} of {displayDocs.length} Ready</span>
-                <div className="w-12 bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-300 ${
-                      progressPercent === 100 ? 'bg-emerald-500' : 'bg-primary'
-                    }`}
-                    style={{ width: `${progressPercent}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Document Checklist Items */}
-            <div className="space-y-3">
-              {displayDocs.map((doc, idx) => {
-                const isChecked = !!checkedDocs[doc.name];
+            <div role="tablist" aria-label="Trip purpose" className={`grid gap-3 grid-cols-2 ${flow.purposes.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+              {flow.purposes.map(p => {
+                const selected = p.key === activePurpose?.key;
                 return (
-                  <div
-                    key={idx}
-                    onClick={() => toggleDocChecked(doc.name)}
-                    className={`p-4 rounded-2xl border transition-all cursor-pointer flex items-start gap-3.5 ${
-                      isChecked
-                        ? 'bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-400/20 shadow-2xs'
-                        : 'bg-slate-50/60 hover:bg-slate-50 border-slate-200/80'
+                  <button
+                    key={p.key}
+                    role="tab"
+                    aria-selected={selected}
+                    onClick={() => setSelectedVisaCategory(p.key)}
+                    className={`group text-left rounded-2xl p-4 sm:p-5 border transition duration-300 cursor-pointer hover:-translate-y-1 ${
+                      selected ? 'bg-on-surface text-white border-on-surface shadow-xl' : 'bg-white/90 border-outline-variant/30 hover:shadow-lg'
                     }`}
                   >
-                    <div className="mt-0.5 shrink-0">
-                      <div
-                        className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
-                          isChecked
-                            ? 'bg-emerald-600 border-emerald-600 text-white'
-                            : 'border-slate-300 bg-white text-transparent'
-                        }`}
-                      >
-                        <span className="material-symbols-outlined text-xs">check</span>
-                      </div>
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center justify-between gap-1 mb-1">
-                        <h4 className={`font-bold text-sm ${isChecked ? 'text-emerald-950 line-through opacity-80' : 'text-slate-900'}`}>
-                          {doc.name}
-                        </h4>
-                        {doc.providedByZoltan ? (
-                          <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">
-                            Provided by Zoltan
-                          </span>
-                        ) : (
-                          <span className="px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-600 text-[10px] font-semibold">
-                            Applicant Required
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-slate-600 leading-relaxed">
-                        {doc.description}
-                      </p>
-                    </div>
-                  </div>
+                    <span className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6 ${selected ? 'bg-white/10 text-white' : 'bg-primary/10 text-primary'}`}>
+                      <span className="material-symbols-outlined">{p.icon || 'flight_takeoff'}</span>
+                    </span>
+                    <span className="block font-headline font-bold">{p.label}</span>
+                    {p.description && <span className={`block text-sm mt-0.5 ${selected ? 'text-white/70' : 'text-on-surface-variant'}`}>{p.description}</span>}
+                  </button>
                 );
               })}
             </div>
 
-            {/* Reassurance Banner */}
-            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/15 flex items-center gap-3 text-xs text-slate-700">
-              <span className="material-symbols-outlined text-primary text-xl shrink-0">verified</span>
-              <span>
-                <strong>Don't worry if any document is missing:</strong> Your dedicated Zoltan case officer audits every paper, assists with formatting, and fills official forms prior to filing.
-              </span>
-            </div>
-          </div>
-
-          {/* Right Column: Clean Action Card */}
-          <div className="lg:col-span-4 lg:sticky lg:top-28 space-y-4">
-            <div className="bg-white rounded-3xl p-6 border-2 border-primary/20 shadow-lg flex flex-col gap-4">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <span className="font-headline font-bold text-sm text-slate-900 uppercase tracking-wider">
-                  Application Summary
-                </span>
-                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  Concierge Service
-                </span>
+            {activePurpose && (
+              <div key={activePurpose.key} role="tabpanel" className="apply-rise mt-5 bg-white/90 backdrop-blur rounded-3xl border border-outline-variant/30 shadow-sm p-6 sm:p-8 grid md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary">
+                    <span className="material-symbols-outlined text-base">{activePurpose.icon || 'flight_takeoff'}</span>
+                    {activePurpose.label}
+                  </span>
+                  <h3 className="font-headline text-2xl font-extrabold text-on-surface leading-snug">
+                    {activePurpose.description || activePurpose.label} in {destination}
+                  </h3>
+                  <p className="text-on-surface-variant text-sm">
+                    Your checklist below is updated for a {activePurpose.label.toLowerCase()} trip — {displayDocs.length} documents in total.
+                  </p>
+                  <button onClick={handleStartApplication} className={primaryCta}>
+                    Start a {activePurpose.label.toLowerCase()} application{ctaArrow}
+                  </button>
+                </div>
+                {activePurpose.points?.some(Boolean) && (
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-3">Usually involves</p>
+                    <ul className="space-y-2.5">
+                      {activePurpose.points.filter(Boolean).map((pt, i) => (
+                        <li key={pt} className="apply-rise flex items-start gap-2.5 text-sm text-on-surface" style={{ '--i': i + 1 }}>
+                          <span className="material-symbols-outlined text-[18px] text-primary mt-0.5">check_circle</span>{pt}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
               </div>
+            )}
 
-              {/* Fast Facts */}
-              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200/80 space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Destination:</span>
-                  <span className="font-bold text-slate-900 truncate max-w-[150px]">{destination}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Applicant:</span>
-                  <span className="font-semibold text-slate-800 capitalize">{selectedCategory.replace('_', ' ')}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Earliest Slot:</span>
-                  <span className="font-bold text-emerald-700">{finalChosenAppointmentDate || 'Earliest Slot'}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Case Officer:</span>
-                  <span className="font-semibold text-primary">Assigned Today</span>
-                </div>
-              </div>
-
-              {/* What's Included */}
-              <div className="space-y-1.5 text-xs text-slate-700">
-                <p className="font-bold text-slate-900 mb-2">What Zoltan Prepares For You:</p>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-600 text-sm">check_circle</span>
-                  <span>Priority Appointment Booking Slot</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-600 text-sm">check_circle</span>
-                  <span>Official Flight & Hotel Reservations</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-600 text-sm">check_circle</span>
-                  <span>Embassy Application Form & Cover Letter</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-emerald-600 text-sm">check_circle</span>
-                  <span>Full Legal Dossier Pre-Audit</span>
-                </div>
-              </div>
-
-              {/* Primary Action Button */}
-              <button
-                onClick={handleStartApplication}
-                className="w-full bg-gradient-to-r from-primary to-primary-container text-white font-headline font-bold py-4 px-5 rounded-2xl shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 active:translate-y-0 transition-all flex items-center justify-center gap-2 cursor-pointer text-sm"
-              >
-                <span>Start Visa Application</span>
-                <span className="material-symbols-outlined text-base">arrow_forward</span>
+            <div className="mt-5 rounded-2xl bg-primary/5 border border-primary/15 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <p className="flex items-center gap-3 text-sm text-on-surface">
+                <span className="material-symbols-outlined text-primary text-2xl">help</span>
+                <span><strong>Not sure which visa applies to you?</strong> Our experts can confirm it in a few minutes.</span>
+              </p>
+              <button onClick={() => handleOpenWhatsApp()} className="shrink-0 px-4 py-2 rounded-full bg-primary text-white text-sm font-bold hover:-translate-y-0.5 transition cursor-pointer">
+                Ask an expert
               </button>
-
-              {/* Instant WhatsApp Help */}
-              <button
-                onClick={() => handleOpenWhatsApp()}
-                className="w-full py-3 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-headline font-bold text-xs border border-emerald-200 transition-colors flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span className="material-symbols-outlined text-sm">chat</span>
-                Ask Questions on WhatsApp
-              </button>
-
-              <div className="pt-2 border-t border-slate-100 text-center">
-                <Link
-                  to="/why-trust-zoltan-visas"
-                  className="text-xs text-slate-500 hover:text-primary transition-colors flex items-center justify-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-xs text-primary">verified</span>
-                  Why Trust Zoltan? View our UK Incorporation & Accreditations
-                </Link>
-              </div>
             </div>
-          </div>
-        </div>
+          </Reveal>
+        )}
+
+        {/* ---------- What you'll typically need ---------- */}
+        {content.show.documents && (
+          <Reveal className="py-14 grid lg:grid-cols-12 gap-10 items-start" aria-labelledby="docs-heading">
+            <div className="lg:col-span-4 lg:sticky lg:top-28 space-y-4">
+              <Eyebrow>Document checklist</Eyebrow>
+              <h2 id="docs-heading" className="font-headline text-3xl sm:text-4xl font-extrabold tracking-tight text-on-surface">{content.documents_heading}</h2>
+              <p className="text-on-surface-variant">{content.documents_subtitle}</p>
+              <div className="bg-white/90 rounded-2xl border border-outline-variant/30 p-4">
+                <div className="flex justify-between text-sm font-semibold mb-2">
+                  <span>{checkedCount} of {displayDocs.length} ready</span>
+                  <span className={progressPercent === 100 ? 'text-emerald-600' : 'text-primary'}>{progressPercent}%</span>
+                </div>
+                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${progressPercent === 100 ? 'bg-emerald-500' : 'bg-primary'}`} style={{ width: `${progressPercent}%` }} />
+                </div>
+              </div>
+              <button onClick={handleStartApplication} className={primaryCta}>
+                Start your application{ctaArrow}
+              </button>
+            </div>
+
+            <div className="lg:col-span-8 space-y-4">
+              <div role="tablist" aria-label="Applicant status" className="flex gap-2 overflow-x-auto pb-1">
+                {flow.statuses.map(st => {
+                  const selected = st.key === selectedCategory;
+                  return (
+                    <button
+                      key={st.key}
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setSelectedCategory(st.key)}
+                      className={`shrink-0 px-4 py-2.5 rounded-full text-sm font-semibold flex items-center gap-2 border transition duration-300 cursor-pointer ${
+                        selected ? 'bg-on-surface text-white border-on-surface shadow-md' : 'bg-white/90 border-outline-variant/30 text-on-surface hover:border-primary hover:text-primary'
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-base">{st.icon || 'person'}</span>{st.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div key={`${selectedVisaCategory}-${selectedCategory}`} className="grid sm:grid-cols-2 gap-3">
+                {displayDocs.map((doc, idx) => {
+                  const isChecked = !!checkedDocs[doc.name];
+                  return (
+                    <button
+                      key={`${doc.name}-${idx}`}
+                      type="button"
+                      onClick={() => toggleDocChecked(doc.name)}
+                      aria-pressed={isChecked}
+                      style={{ '--i': idx }}
+                      className={`apply-rise text-left p-4 rounded-2xl border transition duration-300 cursor-pointer flex items-start gap-3 hover:-translate-y-0.5 hover:shadow-md ${
+                        isChecked ? 'bg-emerald-50/80 border-emerald-300' : 'bg-white/90 border-outline-variant/30'
+                      }`}
+                    >
+                      <span className={`mt-0.5 w-9 h-9 shrink-0 rounded-xl flex items-center justify-center transition-colors ${isChecked ? 'bg-emerald-600 text-white' : 'bg-primary/10 text-primary'}`}>
+                        <span key={String(isChecked)} className="apply-pop material-symbols-outlined text-lg">{isChecked ? 'check' : doc.icon}</span>
+                      </span>
+                      <span className="flex-1 min-w-0">
+                        <span className={`block font-bold text-sm ${isChecked ? 'text-emerald-950 line-through decoration-emerald-400' : 'text-on-surface'}`}>{doc.name}</span>
+                        <span className="block text-xs text-on-surface-variant mt-1 leading-relaxed">{doc.description}</span>
+                        {doc.providedByZoltan && (
+                          <span className="inline-block mt-2 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-bold">Provided by Zoltan</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="p-4 rounded-2xl bg-primary/5 border border-primary/15 flex items-center gap-3 text-sm text-on-surface">
+                <span className="material-symbols-outlined text-primary text-xl shrink-0">verified</span>
+                <span><strong>Missing something?</strong> Your case officer reviews every document and helps with anything you’re unsure about.</span>
+              </p>
+            </div>
+          </Reveal>
+        )}
+
+        {/* ---------- Common mistakes ---------- */}
+        {content.show.mistakes && content.mistakes.length > 0 && (
+          <Reveal className="py-14 grid lg:grid-cols-12 gap-10 items-start" aria-labelledby="mistakes-heading">
+            <div className="lg:col-span-4 lg:sticky lg:top-28 space-y-4">
+              <Eyebrow>Before you apply</Eyebrow>
+              <h2 id="mistakes-heading" className="font-headline text-3xl sm:text-4xl font-extrabold tracking-tight text-on-surface">{content.mistakes_heading}</h2>
+              <p className="text-on-surface-variant">{content.mistakes_subtitle}</p>
+              <button
+                onClick={() => handleOpenWhatsApp(`Hi Zoltan Visa Team! I'd like my ${destination} visa application reviewed before I submit it.`)}
+                className="inline-flex items-center gap-2 px-5 py-3 rounded-full border border-outline-variant/50 bg-white/80 font-bold text-on-surface hover:border-primary hover:text-primary transition cursor-pointer"
+              >
+                Have your application reviewed
+                <span className="material-symbols-outlined text-lg">arrow_forward</span>
+              </button>
+            </div>
+
+            <ol className="lg:col-span-8 space-y-3">
+              {content.mistakes.map((m, i) => {
+                const open = openMistake === i;
+                return (
+                  <li key={m.title} className={`rounded-2xl border transition duration-300 ${open ? 'bg-white shadow-lg border-primary/30' : 'bg-white/80 border-outline-variant/30 hover:border-primary/30'}`}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenMistake(open ? -1 : i)}
+                      aria-expanded={open}
+                      className="w-full flex items-center gap-4 p-5 text-left cursor-pointer"
+                    >
+                      <span className={`font-headline text-2xl font-extrabold tabular-nums transition-colors ${open ? 'text-primary' : 'text-outline-variant'}`}>
+                        {String(i + 1).padStart(2, '0')}
+                      </span>
+                      <span className="flex-1 font-bold text-on-surface">{m.title}</span>
+                      <span className={`material-symbols-outlined text-on-surface-variant transition-transform duration-300 ${open ? 'rotate-180' : ''}`}>expand_more</span>
+                    </button>
+                    <div className={`grid transition-[grid-template-rows] duration-300 ease-out ${open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'}`}>
+                      <div className="overflow-hidden">
+                        <div className="px-5 pb-5 pl-[4.25rem] space-y-3">
+                          {m.description && <p className="text-sm text-on-surface-variant">{m.description}</p>}
+                          {m.tip && (
+                            <p className="flex items-start gap-2 text-sm font-semibold text-primary">
+                              <span className="material-symbols-outlined text-lg">tips_and_updates</span>{m.tip}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          </Reveal>
+        )}
       </div>
     </main>
   );

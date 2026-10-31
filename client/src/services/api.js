@@ -73,6 +73,16 @@ export const visaAPI = {
     }
   },
 
+  // Get configured citizenship/destination routes
+  getVisaOptions: async () => {
+    try {
+      const response = await api.get('/visa-options');
+      return response.data;
+    } catch (error) {
+      throw error.response?.data || error.message;
+    }
+  },
+
   // Get visa requirements based on citizenship and destination
   getVisaRequirements: async (citizenship, destination) => {
     try {
