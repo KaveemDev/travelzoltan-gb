@@ -8,6 +8,7 @@ import {
 
 import { DOCUMENT_ICONS, DEFAULT_PERSONAL_DETAILS_FIELDS } from '../constants/visaConfig';
 import { APPLY_STEPS, DEFAULT_PURPOSES, DEFAULT_STATUSES } from '../constants/applyFlow';
+import { CHECKLIST_SECTIONS, DEFAULT_CHECKLIST_PAGE } from '../constants/checklistPage';
 
 // Helper to format currency
 const formatCurrency = (amount) => {
@@ -174,6 +175,18 @@ const VisaConfigModal = ({
       }
     }));
   };
+  // Checklist page (/checklist) copy, stored in form_schema.checklist_page
+  const checklistPage = configForm.form_schema?.checklist_page || {};
+  const updateChecklistPage = (patch) => {
+    setConfigForm(prev => ({
+      ...prev,
+      form_schema: {
+        ...(prev.form_schema || {}),
+        checklist_page: { ...(prev.form_schema?.checklist_page || {}), ...patch }
+      }
+    }));
+  };
+
   const updateApplyStep = (key, field, value) => {
     updateApplyFlow({ steps: { ...(applyFlow.steps || {}), [key]: { ...(applyFlow.steps?.[key] || {}), [field]: value } } });
   };
@@ -370,6 +383,12 @@ const VisaConfigModal = ({
                 badge: totalDocsOverall > 0 ? `${totalDocsOverall} items` : null 
               },
  
+              {
+                id: 'checklist',
+                label: 'Checklist Page',
+                icon: 'checklist',
+                badge: `${CHECKLIST_SECTIONS.filter(sec => checklistPage.sections?.[sec.key] !== false).length} sections`
+              },
               {
                 id: 'apply',
                 label: 'Apply Page',
@@ -1177,6 +1196,86 @@ const VisaConfigModal = ({
                 )}
               </div>
 
+            </div>
+          )}
+
+          {/* TAB: CHECKLIST PAGE CONTENT */}
+          {activeTab === 'checklist' && (
+            <div className="space-y-8 max-w-4xl mx-auto py-2">
+              <p className="text-xs text-outline">
+                Text shown on this route’s checklist page. Leave a field blank to use the default (shown greyed).
+                Use {'{destination}'} and {'{citizenship}'} to insert the route’s names. Trip purposes and applicant
+                statuses come from the Apply Page tab; documents from Required Documents.
+              </p>
+
+              <div className="space-y-3">
+                <h4 className="font-bold text-sm text-on-surface">Sections</h4>
+                {CHECKLIST_SECTIONS.map(sec => {
+                  const on = checklistPage.sections?.[sec.key] !== false;
+                  return (
+                    <div key={sec.key} className="flex items-center justify-between p-3 rounded-xl border border-outline-variant/30 bg-surface-container-lowest">
+                      <span className="text-sm font-semibold text-on-surface">{sec.label}</span>
+                      <div className="flex items-center gap-2 text-xs font-semibold">
+                        <ToggleSwitch
+                          id={`checklist-section-${sec.key}`}
+                          label={`Show ${sec.label}`}
+                          checked={on}
+                          onChange={v => updateChecklistPage({ sections: { ...(checklistPage.sections || {}), [sec.key]: v } })}
+                        />
+                        <span className={on ? 'text-on-surface' : 'text-outline'}>{on ? 'Shown' : 'Hidden'}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {[
+                { title: 'Hero', fields: [['hero_eyebrow', 'Small label'], ['hero_title', 'Title'], ['hero_highlight', 'Highlighted end of title'], ['hero_subtitle', 'Subtitle', true], ['hero_image', 'Image URL (shown when no appointment card)', true]] },
+                { title: 'What are you travelling for?', fields: [['purpose_heading', 'Heading'], ['purpose_subtitle', 'Subtitle']] },
+                { title: 'What you’ll typically need', fields: [['documents_heading', 'Heading'], ['documents_subtitle', 'Subtitle']] },
+                { title: 'Avoid the common mistakes', fields: [['mistakes_heading', 'Heading'], ['mistakes_subtitle', 'Subtitle']] }
+              ].map(group => (
+                <div key={group.title} className="space-y-3">
+                  <h4 className="font-bold text-sm text-on-surface">{group.title}</h4>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    {group.fields.map(([key, name, wide]) => (
+                      <label key={key} className={`block text-xs ${wide ? 'sm:col-span-2' : ''}`}>
+                        <span className="block font-semibold text-on-surface mb-1">{name}</span>
+                        <input
+                          value={checklistPage[key] || ''}
+                          placeholder={DEFAULT_CHECKLIST_PAGE[key] || 'https://…'}
+                          onChange={e => updateChecklistPage({ [key]: e.target.value })}
+                          className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <label className="block text-xs">
+                <span className="block font-semibold text-on-surface mb-1">Hero ticks</span>
+                <textarea
+                  rows={3}
+                  value={(checklistPage.hero_points || []).join('\n')}
+                  placeholder={DEFAULT_CHECKLIST_PAGE.hero_points.join('\n')}
+                  onChange={e => updateChecklistPage({ hero_points: e.target.value.split('\n') })}
+                  className="w-full rounded-xl border border-outline-variant/40 bg-white px-3 py-2 text-sm"
+                />
+              </label>
+
+              <ListEditor
+                title="Common mistakes"
+                hint="Each item opens to show its description and how you help."
+                items={checklistPage.mistakes?.length ? checklistPage.mistakes : DEFAULT_CHECKLIST_PAGE.mistakes}
+                blank={() => ({ title: '', description: '', tip: '' })}
+                onChange={mistakes => updateChecklistPage({ mistakes })}
+                fields={[
+                  { key: 'title', label: 'Title', wide: true },
+                  { key: 'description', label: 'Description', wide: true },
+                  { key: 'tip', label: 'How we help', wide: true }
+                ]}
+              />
             </div>
           )}
 
