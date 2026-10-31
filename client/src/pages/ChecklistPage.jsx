@@ -806,7 +806,7 @@ const ChecklistPage = () => {
             </div>
 
             <div className="lg:col-span-8 space-y-4">
-              <div role="tablist" aria-label="Applicant status" className="flex gap-2 overflow-x-auto pb-1">
+              <div role="tablist" aria-label="Applicant status" className="flex flex-wrap gap-2">
                 {flow.statuses.map(st => {
                   const selected = st.key === selectedCategory;
                   return (
