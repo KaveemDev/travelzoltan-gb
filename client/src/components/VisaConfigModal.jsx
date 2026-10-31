@@ -1231,6 +1231,7 @@ const VisaConfigModal = ({
 
               {[
                 { title: 'Hero', fields: [['hero_eyebrow', 'Small label'], ['hero_title', 'Title'], ['hero_highlight', 'Highlighted end of title'], ['hero_subtitle', 'Subtitle', true], ['hero_image', 'Image URL (shown when no appointment card)', true]] },
+                { title: 'Hero image badges', fields: [['hero_badge_title', 'Badge title ({count} = number of documents)'], ['hero_badge_subtitle', 'Badge subtitle'], ['hero_badge_icon', 'Badge icon (Material Symbols name)'], ['hero_pill', 'Top-corner pill text']] },
                 { title: 'What are you travelling for?', fields: [['purpose_heading', 'Heading'], ['purpose_subtitle', 'Subtitle']] },
                 { title: 'What you’ll typically need', fields: [['documents_heading', 'Heading'], ['documents_subtitle', 'Subtitle']] },
                 { title: 'Avoid the common mistakes', fields: [['mistakes_heading', 'Heading'], ['mistakes_subtitle', 'Subtitle']] }

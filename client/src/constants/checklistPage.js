@@ -1,6 +1,7 @@
 // Default copy for the /checklist page. Admins override any of it per route via form_schema.checklist_page.
-// {destination} and {citizenship} are replaced with the route's names.
+// {destination} and {citizenship} are replaced with the route's names; {count} in hero badges with the document count.
 export const CHECKLIST_SECTIONS = [
+  { key: 'hero_badges', label: 'Badges on the hero image' },
   { key: 'purposes', label: 'What are you travelling for?' },
   { key: 'documents', label: 'What you’ll typically need' },
   { key: 'mistakes', label: 'Avoid the common mistakes' }
@@ -12,6 +13,10 @@ export const DEFAULT_CHECKLIST_PAGE = {
   hero_highlight: 'handled with confidence.',
   hero_subtitle: 'Expert help with your {destination} application, from document preparation to appointment support.',
   hero_image: '',
+  hero_badge_icon: 'fact_check',
+  hero_badge_title: '{count} documents',
+  hero_badge_subtitle: 'checked by experts',
+  hero_pill: 'Expert reviewed',
   hero_points: ['Expert guidance', 'Secure document handling', 'Appointment support'],
   purpose_heading: 'What are you travelling to {destination} for?',
   purpose_subtitle: 'Choose your trip purpose to see what it usually involves.',

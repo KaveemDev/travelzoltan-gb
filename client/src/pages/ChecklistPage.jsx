@@ -713,21 +713,25 @@ const ChecklistPage = () => {
                   </div>
                 </figure>
 
-                <div className="apply-float absolute top-6 -right-2 sm:-right-4 bg-white/95 backdrop-blur rounded-full shadow-lg pl-2 pr-4 py-2 flex items-center gap-2 text-sm font-semibold text-on-surface">
-                  <span className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                    <span className="material-symbols-outlined text-base">verified</span>
-                  </span>
-                  Expert reviewed
-                </div>
-                <div className="apply-float absolute -left-3 lg:left-0 bottom-24 bg-white/95 backdrop-blur rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3" style={{ animationDelay: '-3s' }}>
-                  <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                    <span className="material-symbols-outlined">fact_check</span>
-                  </span>
-                  <span className="text-sm leading-tight">
-                    <span className="block font-bold text-on-surface">{displayDocs.length} documents</span>
-                    <span className="text-on-surface-variant">checked by experts</span>
-                  </span>
-                </div>
+                {content.show.hero_badges && (
+                  <>
+                    <div className="apply-float absolute top-6 -right-2 sm:-right-4 bg-white/95 backdrop-blur rounded-full shadow-lg pl-2 pr-4 py-2 flex items-center gap-2 text-sm font-semibold text-on-surface">
+                      <span className="w-7 h-7 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+                        <span className="material-symbols-outlined text-base">verified</span>
+                      </span>
+                      {content.hero_pill}
+                    </div>
+                    <div className="apply-float absolute -left-3 lg:left-0 bottom-24 bg-white/95 backdrop-blur rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3" style={{ animationDelay: '-3s' }}>
+                      <span className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                        <span className="material-symbols-outlined">{content.hero_badge_icon}</span>
+                      </span>
+                      <span className="text-sm leading-tight">
+                        <span className="block font-bold text-on-surface">{content.hero_badge_title.replace(/\{count\}/g, displayDocs.length)}</span>
+                        <span className="text-on-surface-variant">{content.hero_badge_subtitle.replace(/\{count\}/g, displayDocs.length)}</span>
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
