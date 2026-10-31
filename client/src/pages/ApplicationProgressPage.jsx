@@ -1,37 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { visaAPI } from '../services/api';
 import DocumentUpload from '../components/DocumentUpload';
 import TravelVisaAgreementModal from '../components/TravelVisaAgreementModal';
 import { compressImageFile } from '../utils/imageCompressor';
 import { hasPayInFullOption, getPayNowPoints, getPayInFullPoints, resolvePointText } from '../utils/paymentUtils';
+import { DEFAULT_PERSONAL_DETAILS_FIELDS } from '../constants/visaConfig';
+import { getApplyFlow } from '../constants/applyFlow';
 import {
   AGREEMENT_TITLE,
   AGREEMENT_SUBTITLE,
   AGREEMENT_VERSION,
-  AGREEMENT_PREAMBLE,
-  AGREEMENT_SECTIONS,
   CLIENT_DECLARATIONS,
-  IMPORTANT_NOTE,
   RAW_AGREEMENT_TEXT
 } from '../data/travelVisaAgreementData';
 
-// List of phone country codes
 const countryCodes = [
-  { code: '+44', country: 'UK', flag: '🇬🇧' },
-  { code: '+1', country: 'US/CA', flag: '🇺🇸' },
-  { code: '+91', country: 'IN', flag: '🇮🇳' },
-  { code: '+61', country: 'AU', flag: '🇦🇺' },
-  { code: '+971', country: 'AE', flag: '🇦🇪' },
-  { code: '+49', country: 'DE', flag: '🇩🇪' },
-  { code: '+33', country: 'FR', flag: '🇫🇷' },
-  { code: '+39', country: 'IT', flag: '🇮🇹' },
-  { code: '+34', country: 'ES', flag: '🇪🇸' }
+  { code: '+44', flag: '🇬🇧' },
+  { code: '+1', flag: '🇺🇸' },
+  { code: '+91', flag: '🇮🇳' },
+  { code: '+61', flag: '🇦🇺' },
+  { code: '+971', flag: '🇦🇪' },
+  { code: '+49', flag: '🇩🇪' },
+  { code: '+33', flag: '🇫🇷' },
+  { code: '+39', flag: '🇮🇹' },
+  { code: '+34', flag: '🇪🇸' }
 ];
 
-// List of countries for nationality dropdown
 const countriesList = [
-  "United Kingdom", "India", "United States", "Canada", "Australia", 
+  "United Kingdom", "India", "United States", "Canada", "Australia",
   "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Austria", "Azerbaijan",
   "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi",
   "Cabo Verde", "Cambodia", "Cameroon", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czechia",
@@ -57,123 +54,230 @@ const countriesList = [
   "Zambia", "Zimbabwe"
 ];
 
-// Currencies mapping for currency selector
+// Rates must match EXCHANGE_RATES in the server's createPaymentOrder
 const CURRENCIES = {
-  GBP: { symbol: '£', name: 'GBP - British Pound', rate: 1.0 },
-  USD: { symbol: '$', name: 'USD - US Dollar', rate: 1.27 },
-  EUR: { symbol: '€', name: 'EUR - Euro', rate: 1.18 },
-  INR: { symbol: '₹', name: 'INR - Indian Rupee', rate: 108.0 }
+  GBP: { symbol: '£', name: 'GBP', rate: 1.0 },
+  USD: { symbol: '$', name: 'USD', rate: 1.30 },
+  EUR: { symbol: '€', name: 'EUR', rate: 1.18 },
+  INR: { symbol: '₹', name: 'INR', rate: 108.0 }
 };
 
-const DEFAULT_FORM_FIELDS_CONFIG = {
-  name: { visible: true, required: true, label: 'First Name (given name)' },
-  surname: { visible: true, required: true, label: 'Last Name (surname)' },
-  email: { visible: true, required: true, label: 'Email Address' },
-  phoneLocal: { visible: true, required: true, label: 'Phone Number (whatsapp)' },
-  alternativePhoneLocal: { visible: true, required: false, label: 'Alternative Phone Number' },
-  passportNumber: { visible: true, required: true, label: 'Passport Number' },
-  nationality: { visible: true, required: true, label: 'Nationality' },
-  residentialAddress: { visible: true, required: true, label: 'Residential Address' },
-  dateOfBirth: { visible: false, required: false, label: 'Date of Birth' },
-  destinationAddress: { visible: false, required: false, label: 'Destination Details / Address' },
-  accommodationAddress: { visible: false, required: false, label: 'Family/Friend or Hotel Address' }
-};
+// Admin field ids (form_schema.personal_details_fields) -> applicant form keys.
+// Older routes stored settings under the form key itself (e.g. destinationAddress), so both are read.
+const DETAIL_FIELDS = [
+  { id: 'first_name', name: 'name', label: 'Given names' },
+  { id: 'last_name', name: 'surname', label: 'Surname' },
+  { id: 'date_of_birth', name: 'dateOfBirth', label: 'Date of birth', type: 'date' },
+  { id: 'nationality', name: 'nationality', label: 'Nationality', type: 'country' },
+  { id: 'email', name: 'email', label: 'Email', type: 'email', hint: 'Your confirmation goes here.' },
+  { id: 'phone', name: 'phoneLocal', code: 'phoneCountryCode', label: 'Phone (WhatsApp)', type: 'phone', hint: 'Pick your country code, then your number.' },
+  { id: 'alternative_phone', name: 'alternativePhoneLocal', code: 'alternativePhoneCountryCode', label: 'Alternative phone', type: 'phone' },
+  { id: 'passport_number', name: 'passportNumber', label: 'Passport number' },
+  { id: 'passport_expiry', name: 'passportExpiry', label: 'Passport expiry date', type: 'date' },
+  { id: 'residential_address', name: 'residentialAddress', label: 'Residential address', type: 'textarea' },
+  { id: 'destination_address', name: 'destinationAddress', label: 'Address in destination country', type: 'textarea' },
+  { id: 'accommodation_address', name: 'accommodationAddress', label: 'Family / friend or hotel address', type: 'textarea' }
+];
 
-const getFormFieldsConfig = (visaData) => {
-  const customConfig = visaData?.form_schema?.personal_details_fields || {};
-  const merged = {};
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const daysUntil = (iso) => iso ? Math.ceil((new Date(iso) - new Date(todayISO())) / 86400000) : null;
+const formatDate = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+const money = (n, curr) => `${curr.symbol}${(Math.round(n * curr.rate * 100) / 100).toLocaleString('en-GB', { maximumFractionDigits: 2 })}`;
 
-  Object.keys(DEFAULT_FORM_FIELDS_CONFIG).forEach(fieldKey => {
-    const def = DEFAULT_FORM_FIELDS_CONFIG[fieldKey];
-    const custom = customConfig[fieldKey];
-    merged[fieldKey] = {
-      visible: custom !== undefined && custom.visible !== undefined ? !!custom.visible : def.visible,
-      required: custom !== undefined && custom.required !== undefined ? !!custom.required : def.required,
-      label: def.label
-    };
-  });
-
-  return merged;
-};
+const inputClass = 'w-full bg-white border border-outline-variant/40 rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition';
 
 const ApplicationProgressPage = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
-  const navigate = useNavigate();
 
-  // State from URL search params, location state, or defaults
   const citizenship = searchParams.get('citizenship') || location.state?.citizenship || 'United Kingdom';
   const destination = searchParams.get('destination') || location.state?.destination || 'Europe (Schengen States)';
-  const initialCategory = searchParams.get('category') || location.state?.selectedCategory || 'employed';
-  const initialVisaCategory = searchParams.get('visaType') || location.state?.selectedVisaCategory || 'tourist';
   const initialVisaData = location.state?.visaData || null;
-  const initialAppointmentDate = searchParams.get('appointmentDate') || location.state?.preferredAppointmentDate || '';
 
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory);
-  const [selectedVisaCategory, setSelectedVisaCategory] = useState(initialVisaCategory);
   const [visaData, setVisaData] = useState(initialVisaData);
   const [loading, setLoading] = useState(!initialVisaData);
   const [error, setError] = useState(null);
+  const [visaOptions, setVisaOptions] = useState([]);
+  const loadedRoute = useRef(initialVisaData ? `${citizenship}|${destination}` : null);
 
-  // Application workflow state
-  const [currentStage, setCurrentStage] = useState(1);
-  const [paymentOption, setPaymentOption] = useState('partial'); // 'partial' = pay now, 'full' = pay in full
-  const [selectedCurrency, setSelectedCurrency] = useState('GBP');
-
-  // Form inputs
-  const [formData, setFormData] = useState({
-    name: '',
-    surname: '',
-    fullName: '',
-    email: '',
-    phoneLocal: '',
-    phoneCountryCode: '+44',
-    phone: '',
-    alternativePhoneLocal: '',
-    alternativePhoneCountryCode: '+44',
-    alternativePhone: '',
-    passportNumber: '',
-    nationality: citizenship || '',
-    residentialAddress: '',
-    dateOfBirth: '',
-    destinationAddress: '',
-    accommodationAddress: '',
-    preferredAppointmentDate: initialAppointmentDate
-  });
-
-  // Dynamic form responses
-  const [dynamicFormValues, setDynamicFormValues] = useState({});
-
-  // Core Document uploads tracking: { docName: file }
-  const [coreDocuments, setCoreDocuments] = useState({});
-  const [docsUploaded, setDocsUploaded] = useState(false);
-  const [uploadingDocs, setUploadingDocs] = useState(false);
-  const [uploadProgressText, setUploadProgressText] = useState('');
-  const [applicationId, setApplicationId] = useState(null);
+  const [maxReached, setMaxReached] = useState(0);
+  // Arriving with a route already picked (checklist / landing page) skips straight past the Destination step
+  const [arrivedWithRoute] = useState(() => searchParams.has('citizenship') && searchParams.has('destination'));
+  const [stepError, setStepError] = useState(null);
+  const [busy, setBusy] = useState('');
   const isSubmittingRef = useRef(false);
 
-  // Payment processing state
-  const [paymentStatus, setPaymentStatus] = useState('idle');
-  const [submitted, setSubmitted] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submissionError, setSubmissionError] = useState(null);
+  const [form, setForm] = useState({
+    applicantStatus: searchParams.get('category') || location.state?.selectedCategory || '',
+    visaCategory: searchParams.get('visaType') || location.state?.selectedVisaCategory || 'tourist',
+    centre: '',
+    departureDate: '',
+    travellers: 1,
+    name: '',
+    surname: '',
+    email: '',
+    phoneCountryCode: '+44',
+    phoneLocal: '',
+    alternativePhoneCountryCode: '+44',
+    alternativePhoneLocal: '',
+    passportNumber: '',
+    passportExpiry: '',
+    nationality: citizenship,
+    dateOfBirth: '',
+    residentialAddress: '',
+    destinationAddress: '',
+    accommodationAddress: '',
+    package: '',
+    preferredAppointmentDate: searchParams.get('appointmentDate') || location.state?.preferredAppointmentDate || ''
+  });
 
-  // Terms & Conditions Agreement state
+  const [coreDocuments, setCoreDocuments] = useState({});
+  const [docsUploaded, setDocsUploaded] = useState(false);
+  const [applicationId, setApplicationId] = useState(null);
+
+  const [paymentOption, setPaymentOption] = useState('partial');
+  const [currency, setCurrency] = useState('GBP');
+  const [submitted, setSubmitted] = useState(false);
   const [agreementAccepted, setAgreementAccepted] = useState(false);
   const [agreementModalOpen, setAgreementModalOpen] = useState(false);
-  const [agreementError, setAgreementError] = useState(null);
+
+  useEffect(() => {
+    visaAPI.getVisaOptions().then(d => setVisaOptions(d.configurations || [])).catch(() => {});
+  }, []);
+
+  const fetchVisaRequirements = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      setVisaData(await visaAPI.getVisaRequirements(citizenship, destination));
+      loadedRoute.current = `${citizenship}|${destination}`;
+    } catch (err) {
+      setError(err?.message || (typeof err === 'string' ? err : 'Failed to load visa requirements'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (loadedRoute.current !== `${citizenship}|${destination}`) fetchVisaRequirements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [citizenship, destination]);
+
+  if (!visaData) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center p-6">
+        {error ? (
+          <div className="bg-white p-8 rounded-3xl shadow-lg border border-outline-variant/30 max-w-md w-full text-center space-y-4">
+            <h2 className="text-2xl font-bold text-on-surface">Failed to load details</h2>
+            <p className="text-on-surface-variant text-sm">{error}</p>
+            <button onClick={fetchVisaRequirements} className="bg-primary text-white font-bold px-6 py-3 rounded-full">Try again</button>
+          </div>
+        ) : (
+          <div className="w-12 h-12 border-4 border-primary/20 border-t-primary rounded-full animate-spin" />
+        )}
+      </div>
+    );
+  }
+
+  // ---------- derived config ----------
+  const flow = getApplyFlow(visaData.form_schema, visaData.appointment_data);
+  const fieldsConfig = visaData.form_schema?.personal_details_fields || {};
+  const fieldSetting = (id, name) => fieldsConfig[id] || fieldsConfig[name] || {};
+  const applicantStatus = form.applicantStatus || 'employed';
+  const docsByCategory = visaData.required_documents?.[form.visaCategory] || visaData.required_documents?.tourist || {};
+  const coreDocsConfig = (docsByCategory[applicantStatus] || docsByCategory.employed || {}).now || [];
+  const steps = flow.steps.filter(s =>
+    s.enabled &&
+    !(s.key === 'centre' && !flow.centres.length) &&
+    !(s.key === 'support' && !flow.packages.length) &&
+    !(s.key === 'documents' && !coreDocsConfig.length) &&
+    // the Form Schema tab's Applicant Status / Visa Category toggles hide their steps too
+    !(s.key === 'status' && fieldSetting('applicant_status').visible === false) &&
+    !(s.key === 'purpose' && fieldSetting('visa_category').visible === false)
+  );
+  const startIdx = arrivedWithRoute && steps[0].key === 'destination' && steps.length > 1 ? 1 : 0;
+  const reach = Math.max(maxReached, startIdx);
+  const requested = steps.findIndex(s => s.key === searchParams.get('step'));
+  const idx = requested >= 0 && requested <= reach ? requested : startIdx;
+  const step = steps[idx];
+
+  const detailFields = DETAIL_FIELDS.map(f => {
+    const def = DEFAULT_PERSONAL_DETAILS_FIELDS.find(d => d.id === f.id) || { defaultVisible: true, defaultRequired: false };
+    const custom = fieldSetting(f.id, f.name);
+    return {
+      ...f,
+      visible: custom.visible !== undefined ? !!custom.visible : def.defaultVisible,
+      required: custom.required !== undefined ? !!custom.required : def.defaultRequired
+    };
+  }).filter(f => f.visible);
+
+  const purpose = flow.purposes.find(p => p.key === form.visaCategory);
+  const status = flow.statuses.find(p => p.key === form.applicantStatus);
+  const pkg = flow.packages.find(p => p.key === form.package);
+  const curr = CURRENCIES[currency];
+  const travellers = form.travellers;
+
+  // Pricing mirrors createPaymentOrder on the server
+  const serviceFee = visaData.service_fee;
+  const feeObj = typeof serviceFee === 'object' && serviceFee !== null ? serviceFee : null;
+  const routeTotal = feeObj ? (feeObj.total_amount || (feeObj.admin_fee || 0) + (feeObj.service_fee || 0) + (feeObj.express_fee || 0)) : (parseFloat(serviceFee) || 130);
+  let payOptions;
+  if (pkg) {
+    const price = parseFloat(pkg.price) || 0;
+    const now = parseFloat(pkg.pay_now_amount) || 0;
+    payOptions = [
+      now > 0 && now < price && {
+        id: 'partial',
+        title: `Pay ${money(now * travellers, curr)} now, the rest later`,
+        badge: 'Popular',
+        amount: now * travellers,
+        balance: (price - now) * travellers,
+        lines: [`${money((price - now) * travellers, curr)} balance, paid once your appointment is booked or, for visas without an appointment, before your application is submitted. No extra charge.`]
+      },
+      { id: 'full', title: 'Pay in full', amount: price * travellers, balance: 0, lines: ['Settle the whole service fee today and nothing more to pay us.'] }
+    ].filter(Boolean);
+  } else {
+    const now = feeObj?.pay_now_amount || routeTotal;
+    const full = feeObj?.pay_in_full_amount || routeTotal;
+    payOptions = [
+      { id: 'partial', title: now < routeTotal ? `Pay ${money(now * travellers, curr)} now, the rest later` : 'Pay now', amount: now * travellers, balance: Math.max(0, routeTotal - now) * travellers, lines: getPayNowPoints(serviceFee).map(p => resolvePointText(p, (now * curr.rate).toFixed(2), curr.symbol)) },
+      hasPayInFullOption(serviceFee) && { id: 'full', title: 'Pay in full', amount: full * travellers, balance: 0, lines: getPayInFullPoints(serviceFee).map(p => resolvePointText(p, (full * curr.rate).toFixed(2), curr.symbol)) }
+    ].filter(Boolean);
+  }
+  const selectedPay = payOptions.find(o => o.id === paymentOption) || payOptions[0];
+
+  // ---------- helpers ----------
+  const fullName = `${form.name} ${form.surname}`.trim();
+  const update = (patch) => {
+    setStepError(null);
+    setForm(prev => ({ ...prev, ...patch }));
+  };
+
+  const setParams = (patch) => {
+    setSearchParams(prev => {
+      const p = new URLSearchParams(prev);
+      Object.entries(patch).forEach(([k, v]) => p.set(k, v));
+      return p;
+    });
+  };
+
+  const goTo = (i) => {
+    setStepError(null);
+    setParams({ step: steps[i].key });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const buildAgreementPayload = () => ({
     agreed: true,
     agreedAt: new Date().toISOString(),
-    clientName: formData.fullName || `${formData.name || ''} ${formData.surname || ''}`.trim() || 'Applicant',
-    clientEmail: formData.email,
-    clientPhone: formData.phone || formData.phoneLocal,
-    clientPassport: formData.passportNumber,
+    clientName: fullName || 'Applicant',
+    clientEmail: form.email,
+    clientPhone: `${form.phoneCountryCode} ${form.phoneLocal}`.trim(),
+    clientPassport: form.passportNumber,
     citizenship,
     destination,
-    visaCategory: selectedVisaCategory,
-    applicantStatus: selectedCategory,
+    visaCategory: form.visaCategory,
+    applicantStatus,
     agreementTitle: AGREEMENT_TITLE,
     agreementSubtitle: AGREEMENT_SUBTITLE,
     agreementVersion: AGREEMENT_VERSION,
@@ -181,1339 +285,571 @@ const ApplicationProgressPage = () => {
     declarationsAccepted: CLIENT_DECLARATIONS
   });
 
-  const handleAgreementToggle = async (checked) => {
-    setAgreementAccepted(checked);
-    if (checked) {
-      setAgreementError(null);
-      if (applicationId) {
-        try {
-          const payload = buildAgreementPayload();
-          await visaAPI.updateApplication(applicationId, {
-            user_data: {
-              ...formData,
-              applicantStatus: selectedCategory,
-              visaCategory: selectedVisaCategory,
-              agreement: payload
-            }
-          });
-        } catch (err) {
-          console.warn('Could not auto-sync agreement:', err);
-        }
-      }
+  const buildUserData = (extra = {}) => ({
+    ...form,
+    fullName,
+    phone: `${form.phoneCountryCode} ${form.phoneLocal}`.trim(),
+    alternativePhone: form.alternativePhoneLocal ? `${form.alternativePhoneCountryCode} ${form.alternativePhoneLocal}`.trim() : '',
+    citizenship,
+    destination,
+    applicantStatus,
+    packageTitle: pkg?.title || '',
+    ...extra
+  });
+
+  const saveApplication = async (extra = {}) => {
+    const configuration_id = visaData.configuration_id || 1;
+    if (applicationId) {
+      await visaAPI.updateApplication(applicationId, { configuration_id, user_data: buildUserData(extra) });
+      return applicationId;
     }
+    const res = await visaAPI.createApplication({ configuration_id, user_data: buildUserData({ status: 'Documents Pending', ...extra }) });
+    setApplicationId(res.applicationId);
+    return res.applicationId;
   };
 
-  useEffect(() => {
-    if (!visaData) {
-      fetchVisaRequirements();
-    }
-  }, [citizenship, destination]);
-
-  const fetchVisaRequirements = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await visaAPI.getVisaRequirements(citizenship, destination);
-      setVisaData(data);
-    } catch (err) {
-      console.error('Error loading visa requirements:', err);
-      setError(err?.message || (typeof err === 'string' ? err : 'Failed to load visa requirements'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading && !visaData) {
-    return (
-      <div className="min-h-screen bg-surface-lowest flex items-center justify-center p-6">
-        <div className="text-center space-y-4">
-          <div className="relative w-16 h-16 mx-auto">
-            <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
-            <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-          </div>
-          <p className="text-on-surface-variant font-medium text-lg">Loading visa requirements...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && !visaData) {
-    return (
-      <div className="min-h-screen bg-surface-lowest flex items-center justify-center p-6">
-        <div className="bg-white p-8 rounded-3xl shadow-lg border border-outline-variant/30 max-w-md w-full text-center space-y-4">
-          <div className="w-16 h-16 bg-error/10 text-error rounded-2xl flex items-center justify-center mx-auto">
-            <span className="material-symbols-outlined text-3xl">warning</span>
-          </div>
-          <h2 className="text-2xl font-bold text-on-surface">Failed to load details</h2>
-          <p className="text-on-surface-variant text-sm">{error}</p>
-          <button
-            onClick={fetchVisaRequirements}
-            className="bg-primary text-white font-bold px-6 py-3 rounded-full shadow-md hover:bg-primary/90 transition-all"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!visaData) return null;
-
-  const coreDocsConfig = visaData.required_documents?.[selectedVisaCategory]?.[selectedCategory]?.now || [
-    { icon: "travel", name: "Passport Front and Back", description: "Valid for at least 6 months beyond intended stay." },
-    { icon: "badge", name: "UK Valid Status (Online Status)", description: "Proof of current legal status or residency requirement." }
-  ];
-
-  const serviceFee = visaData?.service_fee;
-
-  const totalAmount = typeof serviceFee === 'object' && serviceFee !== null 
-    ? (serviceFee.total_amount || (serviceFee.admin_fee || 0) + (serviceFee.service_fee || 0) + (serviceFee.express_fee || 0)) 
-    : parseFloat(serviceFee) || 130;
-
-  const payNowAmount = typeof serviceFee === 'object' && serviceFee !== null && serviceFee.pay_now_amount 
-    ? serviceFee.pay_now_amount 
-    : totalAmount;
-
-  const payInFullAmount = typeof serviceFee === 'object' && serviceFee !== null && serviceFee.pay_in_full_amount
-    ? serviceFee.pay_in_full_amount
-    : 0;
-
-  const hasPayInFull = hasPayInFullOption(serviceFee);
-
-  const discountAmount = hasPayInFull ? Math.max(0, totalAmount - payInFullAmount) : 0;
-  const discountPercentage = (hasPayInFull && totalAmount > 0) ? Math.round((discountAmount / totalAmount) * 100) : 0;
-
-  const payNowPoints = getPayNowPoints(serviceFee);
-  const payInFullPoints = getPayInFullPoints(serviceFee);
-
-  const curr = CURRENCIES[selectedCurrency] || CURRENCIES.GBP;
-  const displayTotal = (totalAmount * curr.rate).toFixed(2);
-  const displayPayNow = (payNowAmount * curr.rate).toFixed(2);
-  const displayPayInFull = (payInFullAmount * curr.rate).toFixed(2);
-
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => {
-      const updated = {
-        ...prev,
-        [name]: value
-      };
-      
-      // Sync fullName
-      if (name === 'name' || name === 'surname') {
-        updated.fullName = `${updated.name || ''} ${updated.surname || ''}`.trim();
+  const validate = () => {
+    switch (step.key) {
+      case 'destination':
+        return citizenship && destination ? null : 'Choose your passport and destination.';
+      case 'status':
+        return status ? null : 'Choose the option that best describes you.';
+      case 'purpose':
+        return purpose ? null : 'Choose what the trip is for.';
+      case 'centre':
+        return flow.centres.some(c => c.name === form.centre) ? null : 'Choose where you will apply.';
+      case 'dates':
+        if (!form.departureDate) return 'Add your departure date.';
+        return form.departureDate < todayISO() ? 'The departure date is in the past.' : null;
+      case 'details': {
+        const missing = detailFields.filter(f => f.required && !String(form[f.name] || '').trim()).map(f => f.label);
+        if (missing.length) return `Please fill in: ${missing.join(', ')}.`;
+        if (form.email && !/^\S+@\S+\.\S+$/.test(form.email)) return 'Enter a valid email address.';
+        if (form.passportExpiry && form.departureDate && form.passportExpiry < form.departureDate) return 'Your passport expires before your departure date.';
+        return null;
       }
-      
-      // Sync phone
-      if (name === 'phoneLocal' || name === 'phoneCountryCode') {
-        updated.phone = `${updated.phoneCountryCode || '+44'} ${updated.phoneLocal || ''}`.trim();
-      }
-      
-      // Sync alternative phone
-      if (name === 'alternativePhoneLocal' || name === 'alternativePhoneCountryCode') {
-        updated.alternativePhone = updated.alternativePhoneLocal
-          ? `${updated.alternativePhoneCountryCode || '+44'} ${updated.alternativePhoneLocal || ''}`.trim()
-          : '';
-      }
-      
-      return updated;
-    });
-  };
-
-  const handleNext = async () => {
-    if (loading || uploadingDocs || isSubmittingRef.current) return;
-
-    if (currentStage === 1) {
-      const fieldsConfig = getFormFieldsConfig(visaData);
-      const missingFields = [];
-
-      if (fieldsConfig.name.visible && fieldsConfig.name.required && !formData.name) missingFields.push('First Name');
-      if (fieldsConfig.surname.visible && fieldsConfig.surname.required && !formData.surname) missingFields.push('Last Name');
-      if (fieldsConfig.email.visible && fieldsConfig.email.required && !formData.email) missingFields.push('Email Address');
-      if (fieldsConfig.phoneLocal.visible && fieldsConfig.phoneLocal.required && !formData.phoneLocal) missingFields.push('Phone Number');
-      if (fieldsConfig.passportNumber.visible && fieldsConfig.passportNumber.required && !formData.passportNumber) missingFields.push('Passport Number');
-      if (fieldsConfig.nationality.visible && fieldsConfig.nationality.required && !formData.nationality) missingFields.push('Nationality');
-      if (fieldsConfig.residentialAddress.visible && fieldsConfig.residentialAddress.required && !formData.residentialAddress) missingFields.push('Residential Address');
-      if (fieldsConfig.dateOfBirth.visible && fieldsConfig.dateOfBirth.required && !formData.dateOfBirth) missingFields.push('Date of Birth');
-      if (fieldsConfig.destinationAddress.visible && fieldsConfig.destinationAddress.required && !formData.destinationAddress) missingFields.push('Destination Details');
-      if (fieldsConfig.accommodationAddress.visible && fieldsConfig.accommodationAddress.required && !formData.accommodationAddress) missingFields.push('Family/Friend or Hotel Address');
-
-      if (missingFields.length > 0) {
-        alert(`Please fill in all required personal details: ${missingFields.join(', ')}.`);
-        return;
-      }
-
-      try {
-        isSubmittingRef.current = true;
-        setLoading(true);
-        const submitData = {
-          configuration_id: visaData.configuration_id || 1,
-          user_data: {
-            ...formData,
-            applicantStatus: selectedCategory,
-            visaCategory: selectedVisaCategory,
-            status: 'Documents Pending'
-          }
-        };
-
-        if (applicationId) {
-          await visaAPI.updateApplication(applicationId, submitData);
-        } else {
-          const response = await visaAPI.createApplication(submitData);
-          if (response.applicationId) {
-            setApplicationId(response.applicationId);
-          }
-        }
-      } catch (err) {
-        console.error('Error saving contact details lead:', err);
-        alert('Failed to save contact details. Please try again.');
-        return;
-      } finally {
-        isSubmittingRef.current = false;
-        setLoading(false);
-      }
-    }
-    
-    if (currentStage === 2) {
-      if (Object.keys(coreDocuments).length < coreDocsConfig.length) {
-        alert('Please upload all required documents before proceeding.');
-        return;
-      }
-
-      if (!agreementAccepted) {
-        setAgreementError('Please read and accept the Visa Assistance Agreement and declarations to continue.');
-        const el = document.getElementById('stage2-agreement-section') || document.getElementById('agreement-section');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-        return;
-      }
-      setAgreementError(null);
-
-      const agreementPayload = buildAgreementPayload();
-
-      if (!docsUploaded) {
-        try {
-          isSubmittingRef.current = true;
-          setUploadingDocs(true);
-          setLoading(true);
-
-          let currentAppId = applicationId;
-          if (!currentAppId) {
-            console.warn('applicationId missing when uploading documents, creating application now');
-            const res = await visaAPI.createApplication({
-              configuration_id: visaData?.configuration_id || 1,
-              user_data: {
-                ...formData,
-                applicantStatus: selectedCategory,
-                visaCategory: selectedVisaCategory,
-                status: 'Payment Pending',
-                agreement: agreementPayload
-              }
-            });
-            if (res.applicationId) {
-              currentAppId = res.applicationId;
-              setApplicationId(currentAppId);
-            }
-          } else {
-            // Save agreement to backend immediately
-            await visaAPI.updateApplication(currentAppId, {
-              user_data: {
-                ...formData,
-                applicantStatus: selectedCategory,
-                visaCategory: selectedVisaCategory,
-                agreement: agreementPayload
-              }
-            });
-          }
-
-          // Upload documents one by one with client-side image compression
-          const docEntries = Object.entries(coreDocuments);
-          for (let i = 0; i < docEntries.length; i++) {
-            const [docType, rawFile] = docEntries[i];
-            setUploadProgressText(`Uploading ${docType} (${i + 1}/${docEntries.length})...`);
-
-            const fileToUpload = await compressImageFile(rawFile, { maxDimension: 2000, quality: 0.82 });
-            const submitData = new FormData();
-            submitData.append('documents', fileToUpload);
-            submitData.append('document_types', JSON.stringify([docType.trim()]));
-
-            await visaAPI.uploadDocuments(currentAppId, submitData);
-          }
-
-          setDocsUploaded(true);
-        } catch (err) {
-          console.error('Error saving documents:', err);
-          const is413 = err?.status === 413 || err?.statusCode === 413 || (typeof err === 'string' && err.includes('413')) || (err?.message && err.message.includes('413'));
-          if (is413) {
-            alert('A document file is too large for the server. Please try re-selecting it or upload an image/document under 5MB.');
-          } else {
-            alert(err?.message || (typeof err === 'string' ? err : 'Failed to save uploaded documents. Please try again.'));
-          }
-          return;
-        } finally {
-          isSubmittingRef.current = false;
-          setUploadingDocs(false);
-          setLoading(false);
-          setUploadProgressText('');
-        }
-      } else if (applicationId) {
-        // Documents already uploaded, ensure signed agreement is synced
-        try {
-          await visaAPI.updateApplication(applicationId, {
-            user_data: {
-              ...formData,
-              applicantStatus: selectedCategory,
-              visaCategory: selectedVisaCategory,
-              agreement: agreementPayload
-            }
-          });
-        } catch (syncErr) {
-          console.warn('Agreement sync warning:', syncErr);
-        }
-      }
-    }
-    
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setCurrentStage(prev => Math.min(prev + 1, 3));
-  };
-
-  const handleBack = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setCurrentStage(prev => Math.max(prev - 1, 1));
-  };
-
-  const handleRazorpayPayment = async (appId, orderData) => {
-    return new Promise((resolve, reject) => {
-      const options = {
-        key: orderData.keyId,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: 'ZoltanVisa',
-        description: 'Visa Application Service Fee',
-        order_id: orderData.orderId,
-        handler: async function (response) {
-          try {
-            const verifyData = {
-              applicationId: appId,
-              razorpay_order_id: response.razorpay_order_id,
-              razorpay_payment_id: response.razorpay_payment_id,
-              razorpay_signature: response.razorpay_signature
-            };
-            await visaAPI.verifyPayment(verifyData);
-            resolve(response);
-          } catch (error) {
-            reject(error);
-          }
-        },
-        prefill: {
-          name: formData.fullName,
-          email: formData.email,
-          contact: formData.phone
-        },
-        theme: {
-          color: '#ff4d85'
-        },
-        modal: {
-          ondismiss: function() {
-            reject(new Error('Payment cancelled by user'));
-          }
-        }
-      };
-
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-    });
-  };
-
-  const handleSubmit = async () => {
-    if (loading || uploadingDocs || isSubmittingRef.current) return;
-
-    if (!agreementAccepted) {
-      setAgreementError('Please read and agree to the Visa Assistance Agreement before proceeding to payment.');
-      const el = document.getElementById('agreement-section');
-      if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-      return;
-    }
-    setAgreementError(null);
-
-    const agreementPayload = {
-      agreed: true,
-      agreedAt: new Date().toISOString(),
-      clientName: formData.fullName || `${formData.name || ''} ${formData.surname || ''}`.trim(),
-      clientEmail: formData.email,
-      clientPhone: formData.phone || formData.phoneLocal,
-      clientPassport: formData.passportNumber,
-      citizenship,
-      destination,
-      visaCategory: selectedVisaCategory,
-      applicantStatus: selectedCategory,
-      agreementTitle: AGREEMENT_TITLE,
-      agreementSubtitle: AGREEMENT_SUBTITLE,
-      agreementVersion: AGREEMENT_VERSION,
-      agreementText: RAW_AGREEMENT_TEXT,
-      declarationsAccepted: CLIENT_DECLARATIONS
-    };
-
-    try {
-      isSubmittingRef.current = true;
-      setLoading(true);
-      
-      let currentAppId = applicationId;
-      
-      if (currentAppId) {
-        // Update existing application user_data with payment details and signed agreement
-        await visaAPI.updateApplication(currentAppId, {
-          user_data: {
-            ...formData,
-            applicantStatus: selectedCategory,
-            visaCategory: selectedVisaCategory,
-            paymentOption,
-            paymentCurrency: selectedCurrency,
-            paymentAmountGBP: paymentOption === 'partial' ? payNowAmount : payInFullAmount,
-            agreement: agreementPayload
-          }
-        });
-      } else {
-        // Fallback: create application from scratch if applicationId is somehow missing
-        console.warn('applicationId missing in handleSubmit, creating now');
-        const submitData = new FormData();
-        submitData.append('configuration_id', visaData.configuration_id || 1);
-        submitData.append('user_data', JSON.stringify({
-          ...formData,
-          applicantStatus: selectedCategory,
-          visaCategory: selectedVisaCategory,
-          paymentOption,
-          paymentCurrency: selectedCurrency,
-          paymentAmountGBP: paymentOption === 'partial' ? payNowAmount : payInFullAmount,
-          status: 'Payment Pending',
-          agreement: agreementPayload
-        }));
-        
-        const documentTypes = [];
-        Object.entries(coreDocuments).forEach(([docType, file]) => {
-          submitData.append('documents', file);
-          documentTypes.push(docType);
-        });
-        
-        if (documentTypes.length > 0) {
-          submitData.append('document_types', JSON.stringify(documentTypes));
-        }
-
-        const response = await visaAPI.createApplication(submitData);
-        if (response.applicationId) {
-          currentAppId = response.applicationId;
-          setApplicationId(currentAppId);
-        }
-      }
-
-      if (currentAppId) {
-        setPaymentStatus('pending');
-        const orderData = await visaAPI.createPaymentOrder(currentAppId, selectedCurrency, paymentOption);
-
-        setPaymentStatus('processing');
-        
-        await handleRazorpayPayment(currentAppId, orderData);
-        
-        setPaymentStatus('completed');
-        setSubmitted(true);
-      }
-    } catch (err) {
-      if (err.message === 'Payment cancelled by user') {
-        setPaymentStatus('failed');
-        alert('Payment was cancelled. Your application is saved but payment is pending.');
-      } else {
-        alert(err.message || 'Failed to submit application or process payment');
-      }
-      console.error('Error submitting application:', err);
-    } finally {
-      isSubmittingRef.current = false;
-      setLoading(false);
-    }
-  };
-
-  const renderAgreementSection = (id = 'agreement-section') => (
-    <div id={id} className="bg-surface-lowest rounded-3xl border border-outline-variant/30 overflow-hidden shadow-sm transition-all duration-300">
-      <div className="bg-surface-container-lowest px-6 py-5 border-b border-outline-variant/30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-            <span className="material-symbols-outlined text-2xl">verified_user</span>
-          </div>
-          <div>
-            <h3 className="font-headline font-bold text-lg text-on-surface flex items-center gap-2">
-              Visa Assistance Agreement
-              <span className="text-[11px] bg-primary/10 text-primary px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                Required
-              </span>
-            </h3>
-            <p className="text-xs text-on-surface-variant">
-              Zoltan UK & Visa Assistance Services Terms & Declarations
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            onClick={() => setAgreementModalOpen(true)}
-            className="text-xs font-semibold px-3 py-1.5 rounded-xl text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-base">open_in_full</span>
-            <span>Read Fullscreen</span>
-          </button>
-        </div>
-      </div>
-
-      <div className="p-6 space-y-6">
-        {/* Quick highlights */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/20">
-            <p className="font-bold text-on-surface flex items-center gap-1.5 text-primary">
-              <span className="material-symbols-outlined text-sm">schedule</span>
-              35 Days + 10 Days
-            </p>
-            <p className="text-on-surface-variant mt-1 text-[11px]">
-              Standard internal timeline plus 10-day grace period.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/20">
-            <p className="font-bold text-on-surface flex items-center gap-1.5 text-amber-600">
-              <span className="material-symbols-outlined text-sm">gavel</span>
-              No Approval Guarantee
-            </p>
-            <p className="text-on-surface-variant mt-1 text-[11px]">
-              Sole decision power rests with official authorities.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/20">
-            <p className="font-bold text-on-surface flex items-center gap-1.5 text-secondary">
-              <span className="material-symbols-outlined text-sm">verified</span>
-              Authentic Documents
-            </p>
-            <p className="text-on-surface-variant mt-1 text-[11px]">
-              Applicant is solely responsible for genuine documents.
-            </p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-surface-container-low border border-outline-variant/20">
-            <p className="font-bold text-on-surface flex items-center gap-1.5 text-purple-600">
-              <span className="material-symbols-outlined text-sm">payments</span>
-              Third-Party Fees
-            </p>
-            <p className="text-on-surface-variant mt-1 text-[11px]">
-              Government & embassy fees are separate from service fees.
-            </p>
-          </div>
-        </div>
-
-        {/* Scrollable Agreement Reader */}
-        <div className="relative">
-          <div className="max-h-64 overflow-y-auto pr-3 rounded-2xl bg-surface-container-lowest p-5 border border-outline-variant/30 text-xs text-on-surface/85 space-y-4 shadow-inner">
-            <div className="italic text-on-surface-variant/90 border-b border-outline-variant/20 pb-3">
-              {AGREEMENT_PREAMBLE}
-            </div>
-
-            {AGREEMENT_SECTIONS.map((sec) => (
-              <div key={sec.id} className="space-y-1.5">
-                <h4 className="font-bold text-primary text-xs">{sec.title}</h4>
-                {sec.clauses.map((c, idx) => (
-                  <div key={idx} className="space-y-1">
-                    <p>
-                      {c.number !== '7.0' && <strong className="text-on-surface mr-1">{c.number}</strong>}
-                      {c.text}
-                    </p>
-                    {c.bullets && (
-                      <ul className="list-disc list-inside pl-3 space-y-0.5 text-on-surface-variant">
-                        {c.bullets.map((b, bIdx) => (
-                          <li key={bIdx}>{b}</li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-
-            {/* Declarations list */}
-            <div className="pt-3 border-t border-outline-variant/20 space-y-2">
-              <h4 className="font-bold text-primary uppercase text-xs">CLIENT DECLARATION & ACCEPTANCE</h4>
-              <p className="text-[11px] text-on-surface-variant font-medium">By accepting this Agreement, I confirm that:</p>
-              <ul className="space-y-1 pl-1">
-                {CLIENT_DECLARATIONS.map((dec, dIdx) => (
-                  <li key={dIdx} className="flex items-start gap-2 text-[11px]">
-                    <span className="material-symbols-outlined text-[13px] text-primary shrink-0 mt-0.5">check_circle</span>
-                    <span>{dec}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <p className="text-[10px] text-on-surface-variant text-center pt-2 italic">
-              {IMPORTANT_NOTE}
-            </p>
-          </div>
-          <div className="text-right mt-1.5">
-            <button
-              type="button"
-              onClick={() => setAgreementModalOpen(true)}
-              className="text-[11px] text-primary hover:underline font-semibold cursor-pointer"
-            >
-              View complete agreement in larger window →
-            </button>
-          </div>
-        </div>
-
-        {/* Error Banner if user attempted without checking */}
-        {agreementError && (
-          <div className="p-3.5 rounded-2xl bg-error/10 border border-error/20 flex items-center gap-3 text-error text-xs font-semibold animate-in shake duration-300">
-            <span className="material-symbols-outlined text-lg shrink-0">error</span>
-            <span>{agreementError}</span>
-          </div>
-        )}
-
-        {/* Agreement Checkbox */}
-        <div className={`p-4 sm:p-5 rounded-2xl border-2 transition-all ${agreementAccepted ? 'border-primary/40 bg-primary/5 shadow-sm' : agreementError ? 'border-error/40 bg-error/5' : 'border-outline-variant/40 bg-white hover:border-primary/30'}`}>
-          <label className="flex items-start gap-3.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={agreementAccepted}
-              onChange={(e) => handleAgreementToggle(e.target.checked)}
-              className="mt-1 w-5 h-5 rounded border-outline-variant text-primary focus:ring-primary cursor-pointer shrink-0 accent-primary"
-            />
-            <div className="space-y-1">
-              <span className="font-bold text-sm text-on-surface block">
-                I have read, understood, and voluntarily accept the Visa Assistance Agreement and Client Declaration.
-              </span>
-              <span className="text-xs text-on-surface-variant block leading-relaxed">
-                I confirm that all documents and information provided are genuine, authentic, and accurate. I understand that Zoltan does not guarantee visa approval, and that decisions are made solely by the competent authorities.
-              </span>
-            </div>
-          </label>
-        </div>
-
-        {/* Digital Signature & Timestamp Record */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 px-3 py-2.5 rounded-xl bg-surface-container-lowest text-[11px] text-on-surface-variant border border-outline-variant/20">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-sm text-primary">draw</span>
-            <span>
-              Electronic Signatory: <strong className="text-on-surface font-semibold">{formData.fullName || `${formData.name || ''} ${formData.surname || ''}`.trim() || 'Applicant'}</strong>
-              {formData.passportNumber && <span> (Passport: {formData.passportNumber})</span>}
-            </span>
-          </div>
-          <div className="font-mono text-[10px] text-outline">
-            Ref: ZV-AGR-UK • {new Date().toLocaleDateString('en-GB')}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderStageContent = () => {
-    switch (currentStage) {
-      case 1: {
-        const fieldsConfig = getFormFieldsConfig(visaData);
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-700 ease-out fill-mode-both">
-            <div className="bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              
-              <h2 className="font-headline text-4xl font-extrabold text-on-surface mb-3 tracking-tight">Personal Details</h2>
-              <p className="text-on-surface-variant/80 text-lg mb-10 max-w-xl">
-                Let's start with your information for the <span className="font-semibold text-primary">{selectedCategory}</span> application to <span className="font-semibold text-primary">{destination}</span>.
-              </p>
-              
-              <div className="space-y-8 relative z-10">
-                <div className="bg-surface-lowest rounded-2xl p-6 border border-outline-variant/30 shadow-sm transition-all duration-300 hover:shadow-md hover:border-primary/20">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* First Name */}
-                    {fieldsConfig.name.visible && (
-                      <div className="group relative">
-                        <input 
-                          required={fieldsConfig.name.required}
-                          name="name" 
-                          value={formData.name || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="First Name" 
-                          type="text" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.name ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-3'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          First Name (given name) {fieldsConfig.name.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Last Name */}
-                    {fieldsConfig.surname.visible && (
-                      <div className="group relative">
-                        <input 
-                          required={fieldsConfig.surname.required}
-                          name="surname" 
-                          value={formData.surname || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Last Name" 
-                          type="text" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.surname ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-3'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Last Name (surname) {fieldsConfig.surname.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Email */}
-                    {fieldsConfig.email.visible && (
-                      <div className="group relative">
-                        <input 
-                          required={fieldsConfig.email.required}
-                          name="email" 
-                          value={formData.email || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Email" 
-                          type="email" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.email ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-3'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Email Address {fieldsConfig.email.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Phone Number */}
-                    {fieldsConfig.phoneLocal.visible && (
-                      <div className="group relative flex items-end">
-                        <div className="absolute left-0 bottom-3 z-20 flex items-center">
-                          <span className="text-on-surface-variant/60">+44</span>
-                        </div>
-                        <input 
-                          required={fieldsConfig.phoneLocal.required}
-                          name="phoneLocal" 
-                          value={formData.phoneLocal || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 pl-11 pr-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Phone Number" 
-                          type="tel" 
-                        />
-                        <label className={`absolute transition-all font-medium ${formData.phoneLocal ? '-top-3.5 text-xs text-primary left-0' : 'text-base text-on-surface-variant/60 top-3 left-12'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-placeholder-shown:left-12 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary peer-focus:left-0`}>
-                          Phone Number ( whatsapp ) {fieldsConfig.phoneLocal.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Alternative Phone Number */}
-                    {fieldsConfig.alternativePhoneLocal.visible && (
-                      <div className="group relative flex items-end">
-                        <div className="absolute left-0 bottom-0 z-20 flex items-center h-[46px]">
-                          <select
-                            name="alternativePhoneCountryCode"
-                            value={formData.alternativePhoneCountryCode || '+44'}
-                            onChange={handleInputChange}
-                            className="bg-transparent border-none text-on-surface focus:outline-none text-sm font-medium cursor-pointer max-w-[90px]"
-                          >
-                            {countryCodes.map(c => (
-                              <option key={c.code} value={c.code} className="text-on-surface bg-surface-lowest">
-                                {c.flag} {c.code}
-                              </option>
-                            ))}
-                          </select>
-                          <span className="h-4 w-[1px] bg-outline-variant/50 mx-2" />
-                        </div>
-
-                        <input
-                          name="alternativePhoneLocal"
-                          value={formData.alternativePhoneLocal || ''}
-                          onChange={handleInputChange}
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 pl-[110px] pr-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors relative z-10"
-                          placeholder="Alternative Phone Number"
-                          type="tel"
-                        />
-
-                        <label className={`absolute z-30 pointer-events-none transition-all duration-200 font-medium overflow-hidden text-ellipsis whitespace-nowrap
-                            peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary peer-focus:left-0
-                            ${formData.alternativePhoneLocal
-                              ? '-top-3.5 text-xs text-primary left-0 right-0'
-                              : 'top-3 text-sm text-on-surface-variant/60 left-[110px] right-0'
-                            }
-                          `}>
-                          Alternative Phone Number {fieldsConfig.alternativePhoneLocal.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Passport Number */}
-                    {fieldsConfig.passportNumber.visible && (
-                      <div className="group relative">
-                        <input 
-                          required={fieldsConfig.passportNumber.required}
-                          name="passportNumber" 
-                          value={formData.passportNumber || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Passport Number" 
-                          type="text" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.passportNumber ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-3'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Passport Number {fieldsConfig.passportNumber.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Nationality */}
-                    {fieldsConfig.nationality.visible && (
-                      <div className="group relative">
-                        <select 
-                          required={fieldsConfig.nationality.required}
-                          name="nationality" 
-                          value={formData.nationality || ''} 
-                          onChange={handleInputChange}
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface focus:outline-none focus:border-primary transition-colors z-10 relative appearance-none cursor-pointer text-left"
-                        >
-                          <option value="" disabled className="text-on-surface-variant/60">Select Nationality</option>
-                          {countriesList.map(country => (
-                            <option key={country} value={country} className="text-on-surface bg-surface-lowest">
-                              {country}
-                            </option>
-                          ))}
-                        </select>
-                        <span className="material-symbols-outlined absolute right-0 bottom-3 text-on-surface-variant/60 pointer-events-none z-20">
-                          expand_more
-                        </span>
-                        <label className={`absolute left-0 transition-all font-medium ${formData.nationality ? '-top-3.5 text-xs text-primary' : 'text-base hidden text-on-surface-variant/60 top-3'} peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Nationality {fieldsConfig.nationality.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Date of Birth */}
-                    {fieldsConfig.dateOfBirth.visible && (
-                      <div className="group relative">
-                        <input 
-                          required={fieldsConfig.dateOfBirth.required}
-                          name="dateOfBirth" 
-                          value={formData.dateOfBirth || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Date of Birth" 
-                          type="date" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium -top-3.5 text-xs ${formData.dateOfBirth ? 'text-primary' : 'text-on-surface-variant/60'} peer-focus:text-primary`}>
-                          Date of Birth {fieldsConfig.dateOfBirth.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Residential Address */}
-                    {fieldsConfig.residentialAddress.visible && (
-                      <div className="group relative col-span-1 md:col-span-2">
-                        <textarea 
-                          required={fieldsConfig.residentialAddress.required}
-                          name="residentialAddress" 
-                          value={formData.residentialAddress || ''} 
-                          onChange={handleInputChange} 
-                          rows="3"
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-2 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative resize-none" 
-                          placeholder="Residential Address" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.residentialAddress ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-2'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-2 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Residential Address (Street, City, Postcode, Country) {fieldsConfig.residentialAddress.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Destination Address / Details */}
-                    {fieldsConfig.destinationAddress.visible && (
-                      <div className="group relative col-span-1 md:col-span-2">
-                        <input 
-                          required={fieldsConfig.destinationAddress.required}
-                          name="destinationAddress" 
-                          value={formData.destinationAddress || ''} 
-                          onChange={handleInputChange} 
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-3 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative" 
-                          placeholder="Destination Details / Address" 
-                          type="text" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.destinationAddress ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-3'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-3 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Travel Destination / Address in Destination Country {fieldsConfig.destinationAddress.required && '*'}
-                        </label>
-                      </div>
-                    )}
-
-                    {/* Family/Friend or Hotel Address */}
-                    {fieldsConfig.accommodationAddress.visible && (
-                      <div className="group relative col-span-1 md:col-span-2">
-                        <textarea 
-                          required={fieldsConfig.accommodationAddress.required}
-                          name="accommodationAddress" 
-                          value={formData.accommodationAddress || ''} 
-                          onChange={handleInputChange} 
-                          rows="3"
-                          className="peer w-full bg-transparent border-b-2 border-outline-variant/50 px-0 py-2 text-on-surface placeholder-transparent focus:outline-none focus:border-primary transition-colors z-10 relative resize-none" 
-                          placeholder="Family/Friend or Hotel Address" 
-                        />
-                        <label className={`absolute left-0 transition-all font-medium ${formData.accommodationAddress ? '-top-3.5 text-xs text-primary' : 'text-base text-on-surface-variant/60 top-2'} peer-placeholder-shown:text-base peer-placeholder-shown:text-on-surface-variant/60 peer-placeholder-shown:top-2 peer-focus:-top-3.5 peer-focus:text-xs peer-focus:text-primary`}>
-                          Family/Friend or Hotel Address {fieldsConfig.accommodationAddress.required && '*'}
-                        </label>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-4">
-              <button 
-                onClick={handleNext} 
-                disabled={loading || uploadingDocs}
-                className={`group bg-on-surface text-surface-lowest font-bold px-8 py-4 rounded-full shadow-[0_4px_14px_0_rgb(0,0,0,0.2)] flex items-center gap-3 transition-all duration-300 text-white ${
-                  loading || uploadingDocs 
-                    ? 'opacity-60 cursor-not-allowed pointer-events-none' 
-                    : 'hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5'
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
-                    <span>Saving Details...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Continue to Documents</span>
-                    <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        );
-      }
-      
-      case 2:
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-700 ease-out fill-mode-both">
-            <div className="bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-secondary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-              
-              <h2 className="font-headline text-4xl font-extrabold text-on-surface mb-3 tracking-tight">Required Documents & Service Agreement</h2>
-              <p className="text-on-surface-variant/80 text-lg mb-10 max-w-xl">
-                Please upload your required documents and accept the Visa Assistance Agreement before proceeding to payment.
-              </p>
-            
-              <div className="bg-surface-lowest rounded-2xl p-6 border border-outline-variant/30 shadow-sm relative z-10">
-                <DocumentUpload
-                  requiredDocuments={coreDocsConfig}
-                  onFilesChange={(files) => {
-                    setCoreDocuments(files);
-                    setDocsUploaded(false);
-                  }}
-                  existingFiles={coreDocuments}
-                />
-              </div>
-            </div>
-
-            {/* Travel & Visa Assistance Agreement on Stage 2 */}
-            {renderAgreementSection('stage2-agreement-section')}
-
-            <div className="flex justify-between items-center pt-4">
-              <button 
-                onClick={handleBack} 
-                disabled={loading || uploadingDocs}
-                className="group text-on-surface-variant font-bold px-6 py-4 rounded-full hover:bg-surface-container flex items-center gap-2 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none"
-              >
-                <span className="material-symbols-outlined text-sm group-hover:-translate-x-1 transition-transform">arrow_back</span> 
-                Back
-              </button>
-              <button 
-                onClick={handleNext} 
-                disabled={loading || uploadingDocs}
-                className={`group bg-on-surface text-surface-lowest font-bold px-8 py-4 rounded-full shadow-[0_4px_14px_0_rgb(0,0,0,0.2)] flex items-center gap-3 transition-all duration-300 text-white ${
-                  loading || uploadingDocs 
-                    ? 'opacity-60 cursor-not-allowed pointer-events-none' 
-                    : 'hover:shadow-[0_6px_20px_rgba(0,0,0,0.15)] hover:-translate-y-0.5'
-                }`}
-              >
-                {uploadingDocs ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
-                    <span>{uploadProgressText || 'Uploading Documents...'}</span>
-                  </>
-                ) : loading ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
-                    <span>Processing...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>Review & Payment</span>
-                    <span className="material-symbols-outlined text-sm group-hover:translate-x-1 transition-transform">arrow_forward</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="space-y-8 animate-in fade-in slide-in-from-right-8 duration-700 ease-out fill-mode-both">
-            <div className="bg-white/80 backdrop-blur-xl p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white/50 relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-full h-64 bg-gradient-to-b from-primary/5 to-transparent pointer-events-none" />
-              
-              <h2 className="font-headline text-4xl font-extrabold text-on-surface mb-3 tracking-tight relative z-10">Final Review & Payment</h2>
-              <p className="text-on-surface-variant/80 text-lg mb-10 max-w-xl relative z-10">
-                Select your payment option to proceed.
-              </p>
-
-            {submitted ? (
-              <div className="py-16 text-center space-y-6 relative z-10 animate-in zoom-in duration-500">
-                <div className="w-24 h-24 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
-                  <span className="material-symbols-outlined text-green-500 text-5xl">check_circle</span>
-                </div>
-                <div>
-                  <h3 className="text-3xl font-headline font-bold text-on-surface mb-2">Application Submitted!</h3>
-                  <p className="text-on-surface-variant text-lg">Your payment was successful and your documents are under review.</p>
-                </div>
-                <div className="inline-block bg-surface-container-lowest border border-outline-variant/30 rounded-2xl p-6 mt-8 shadow-sm">
-                   <p className="text-sm text-on-surface font-semibold mb-1">What happens next?</p>
-                   <p className="text-xs text-on-surface-variant">Our team will verify your documents within 24 hours and contact you to collect the remaining documents.</p>
-                </div>
-              </div>
-            ) : paymentStatus === 'processing' ? (
-              <div className="py-24 text-center space-y-6 relative z-10">
-                <div className="relative w-20 h-20 mx-auto">
-                  <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
-                  <div className="absolute inset-0 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-                </div>
-                <div>
-                  <h3 className="text-2xl font-headline font-bold text-on-surface mb-2">Processing Secure Payment</h3>
-                  <p className="text-on-surface-variant">Please complete the payment in the secure Razorpay window...</p>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-10 relative z-10">
-                {/* Currency Selector */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between bg-surface-lowest p-6 rounded-2xl border border-outline-variant/30 shadow-sm gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-2xl">payments</span>
-                    </div>
-                    <div>
-                      <h4 className="font-headline font-bold text-base text-on-surface">Payment Currency</h4>
-                      <p className="text-xs text-on-surface-variant/80">Choose your preferred currency to make the payment</p>
-                    </div>
-                  </div>
-                  <div className="relative shrink-0 w-full sm:w-60">
-                    <select
-                      value={selectedCurrency}
-                      onChange={(e) => setSelectedCurrency(e.target.value)}
-                      className="w-full bg-surface-container-low text-on-surface font-semibold text-sm rounded-xl py-3 pl-4 pr-10 border-none focus:ring-2 focus:ring-primary/40 appearance-none cursor-pointer"
-                    >
-                      {Object.entries(CURRENCIES).map(([code, details]) => (
-                        <option key={code} value={code} className="text-on-surface bg-surface-lowest">
-                          {details.symbol} {details.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-on-surface-variant pointer-events-none">
-                      expand_more
-                    </span>
-                  </div>
-                </div>
-
-                {/* Payment Options Selection */}
-                <div className={`grid grid-cols-1 ${hasPayInFull ? 'md:grid-cols-2 max-w-4xl' : 'max-w-xl'} gap-6 mx-auto w-full`}>
-                  {/* Pay Now */}
-                  <div 
-                    onClick={() => setPaymentOption('partial')}
-                    className={`cursor-pointer rounded-2xl p-6 border-2 transition-all ${paymentOption === 'partial' ? 'border-secondary bg-secondary/5 shadow-md scale-[1.01]' : 'border-outline-variant/30 bg-white hover:border-secondary/50'}`}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="w-12 h-12 rounded-full bg-secondary/10 text-secondary flex items-center justify-center">
-                        <span className="material-symbols-outlined">payments</span>
-                      </div>
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${paymentOption === 'partial' ? 'border-secondary bg-secondary' : 'border-outline-variant/50'}`}>
-                        {paymentOption === 'partial' && <span className="material-symbols-outlined text-white text-[14px]">check</span>}
-                      </div>
-                    </div>
-                    <h3 className="font-bold text-lg text-on-surface mb-1">Pay Now</h3>
-                    <div className="mb-4">
-                      <span className="text-3xl font-bold text-on-surface">{curr.symbol}{displayPayNow}</span>
-                      <span className="text-sm text-on-surface-variant"> today</span>
-                    </div>
-                    <div className="text-sm text-on-surface-variant space-y-2">
-                      {payNowPoints.map((pt, idx) => (
-                        <p key={idx} className="flex items-start gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-secondary shrink-0 mt-0.5">check_circle</span>
-                          <span>{resolvePointText(pt, displayPayNow, curr.symbol)}</span>
-                        </p>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Pay in Full - Render only if configured */}
-                  {hasPayInFull && (
-                    <div 
-                      onClick={() => setPaymentOption('full')}
-                      className={`cursor-pointer rounded-2xl p-6 border-2 transition-all relative overflow-hidden ${paymentOption === 'full' ? 'border-primary bg-primary/5 shadow-md scale-[1.01]' : 'border-outline-variant/30 bg-white hover:border-primary/50'}`}
-                    >
-                      <div className="absolute top-4 right-4 bg-primary text-white text-xs font-bold px-3 py-1 rounded-full shadow-sm">
-                        {discountPercentage}% Discount
-                      </div>
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="w-12 h-12 rounded-full bg-primary text-white flex items-center justify-center">
-                          <span className="material-symbols-outlined">workspace_premium</span>
-                        </div>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${paymentOption === 'full' ? 'border-primary bg-primary' : 'border-outline-variant/50'}`}>
-                          {paymentOption === 'full' && <span className="material-symbols-outlined text-white text-[14px]">check</span>}
-                        </div>
-                      </div>
-                      <h3 className="font-bold text-lg text-on-surface mb-1">Pay in Full</h3>
-                      <div className="mb-4 flex items-end gap-2">
-                        <span className="text-sm text-on-surface-variant line-through mb-1">{curr.symbol}{displayTotal}</span>
-                        <span className="text-3xl font-bold text-primary">{curr.symbol}{displayPayInFull}</span>
-                      </div>
-                      <div className="text-sm text-on-surface-variant space-y-2">
-                        {payInFullPoints.map((pt, idx) => (
-                          <p key={idx} className="flex items-start gap-2">
-                            <span className="material-symbols-outlined text-[18px] text-primary shrink-0 mt-0.5">check_circle</span>
-                            <span>{resolvePointText(pt, displayPayInFull, curr.symbol)}</span>
-                          </p>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Personal Details Summary */}
-                <div className="bg-surface-lowest rounded-2xl border border-outline-variant/30 overflow-hidden shadow-sm">
-                  <div className="bg-surface-container-lowest px-6 py-4 border-b border-outline-variant/30">
-                    <h3 className="font-headline font-bold text-lg flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary">person</span>
-                      Applicant Details
-                    </h3>
-                  </div>
-                  <div className="p-6 grid grid-cols-2 gap-y-6 gap-x-8">
-                    <div>
-                      <p className="text-xs text-on-surface-variant uppercase tracking-wider font-bold mb-1">Category</p>
-                      <p className="font-medium capitalize">{selectedCategory} / {selectedVisaCategory}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-on-surface-variant uppercase tracking-wider font-bold mb-1">Full Name</p>
-                      <p className="font-medium">{formData.fullName}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-on-surface-variant uppercase tracking-wider font-bold mb-1">Email</p>
-                      <p className="font-medium">{formData.email}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-on-surface-variant uppercase tracking-wider font-bold mb-1">Passport</p>
-                      <p className="font-medium">{formData.passportNumber}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Documents Summary */}
-                <div className="bg-surface-lowest rounded-2xl border border-outline-variant/30 overflow-hidden shadow-sm">
-                  <div className="bg-surface-container-lowest px-6 py-4 border-b border-outline-variant/30 flex justify-between items-center">
-                    <h3 className="font-headline font-bold text-lg flex items-center gap-2">
-                      <span className="material-symbols-outlined text-secondary">folder_open</span>
-                      Uploaded Documents
-                    </h3>
-                  </div>
-                  <div className="p-6 space-y-3">
-                    {Object.entries(coreDocuments).map(([key, file]) => (
-                      <div key={key} className="flex items-center justify-between p-3 hover:bg-surface-container-lowest rounded-xl transition-colors group">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-primary/5 text-primary rounded-lg flex items-center justify-center">
-                            <span className="material-symbols-outlined">
-                              {file.type === 'application/pdf' || file.name?.toLowerCase().endsWith('.pdf') 
-                                ? 'picture_as_pdf' 
-                                : (file.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name || '')) 
-                                ? 'image' 
-                                : 'description'}
-                            </span>
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-sm text-on-surface">{key}</h4>
-                            <p className="text-xs text-on-surface-variant mt-0.5 truncate max-w-[200px] sm:max-w-xs">{file.name}</p>
-                          </div>
-                        </div>
-                        <span className="text-xs font-medium text-on-surface-variant/60 group-hover:text-on-surface-variant transition-colors">
-                          {(file.size / 1024 / 1024).toFixed(1)} MB
-                        </span>
-                      </div>
-                    ))}
-                    {formData.accommodationAddress && (
-                      <div className="flex items-center justify-between p-3 hover:bg-surface-container-lowest rounded-xl transition-colors group">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 bg-primary/5 text-primary rounded-lg flex items-center justify-center">
-                            <span className="material-symbols-outlined">home</span>
-                          </div>
-                          <div>
-                            <h4 className="font-semibold text-sm text-on-surface">Accommodation</h4>
-                            <p className="text-xs text-on-surface-variant mt-0.5">{formData.accommodationAddress}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Travel & Visa Assistance Agreement Status / Section */}
-                {agreementAccepted ? (
-                  <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-500/20">
-                        <span className="material-symbols-outlined text-2xl">verified</span>
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-sm text-emerald-950 flex items-center gap-2">
-                          Visa Assistance Agreement Accepted
-                          <span className="text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                            Signed
-                          </span>
-                        </h4>
-                        <p className="text-xs text-emerald-800 mt-0.5">
-                          Electronically signed by <strong>{formData.fullName || `${formData.name || ''} ${formData.surname || ''}`.trim() || 'Applicant'}</strong>
-                          {formData.passportNumber ? ` (Passport: ${formData.passportNumber})` : ''} • Ref: ZV-AGR-UK
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setAgreementModalOpen(true)}
-                      className="px-4 py-2 rounded-xl bg-white border border-emerald-500/30 text-emerald-700 font-semibold text-xs hover:bg-emerald-50 transition-colors shadow-sm self-start sm:self-auto flex items-center gap-1.5 cursor-pointer shrink-0"
-                    >
-                      <span className="material-symbols-outlined text-sm">visibility</span>
-                      View Signed Agreement Copy
-                    </button>
-                  </div>
-                ) : (
-                  renderAgreementSection('stage3-agreement-section')
-                )}
-              </div>
-            )}
-            </div>
-
-            {!submitted && paymentStatus !== 'processing' && (
-              <div className="flex flex-col md:flex-row justify-between items-center gap-4 pt-4">
-                <button 
-                  onClick={handleBack} 
-                  disabled={loading || uploadingDocs}
-                  className="group text-on-surface-variant font-bold px-6 py-4 rounded-full hover:bg-surface-container flex items-center gap-2 transition-all duration-300 w-full md:w-auto justify-center disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <span className="material-symbols-outlined text-sm group-hover:-translate-x-1 transition-transform">arrow_back</span> 
-                  Back to Documents
-                </button>
-                <button 
-                  onClick={handleSubmit} 
-                  disabled={loading || uploadingDocs || paymentStatus === 'processing'}
-                  className="group relative overflow-hidden bg-gradient-to-r from-[#ff4d85] to-[#ff758c] text-white font-bold px-12 py-4 rounded-full shadow-[0_8px_25px_rgba(255,77,133,0.3)] hover:shadow-[0_12px_35px_rgba(255,77,133,0.4)] hover:-translate-y-1 disabled:opacity-70 disabled:hover:translate-y-0 disabled:hover:shadow-none flex items-center justify-center gap-3 transition-all duration-300 w-full md:w-auto cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out rounded-full" />
-                  <span className="relative z-10 flex items-center gap-2">
-                    {loading ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Pay {curr.symbol}{paymentOption === 'partial' ? displayPayNow : displayPayInFull} & Submit</span>
-                        <span className="material-symbols-outlined text-sm">lock</span>
-                      </>
-                    )}
-                  </span>
-                </button>
-              </div>
-            )}
-          </div>
-        );
+      case 'documents':
+        return coreDocsConfig.every(d => coreDocuments[d.name]) ? null : 'Please upload every document before continuing.';
+      case 'support':
+        return pkg ? null : 'Choose a support package.';
       default:
         return null;
     }
   };
 
-  const steps = [
-    { num: 1, title: 'Personal Details', desc: 'Basic information' },
-    { num: 2, title: 'Documents & Agreement', desc: 'Uploads & Service Terms' },
-    { num: 3, title: 'Review & Payment', desc: 'Select option & Pay' }
-  ];
+  const uploadDocuments = async (appId) => {
+    const entries = Object.entries(coreDocuments);
+    for (let i = 0; i < entries.length; i++) {
+      const [docType, rawFile] = entries[i];
+      setBusy(`Uploading ${i + 1}/${entries.length}...`);
+      const file = await compressImageFile(rawFile, { maxDimension: 2000, quality: 0.82 });
+      const data = new FormData();
+      data.append('documents', file);
+      data.append('document_types', JSON.stringify([docType.trim()]));
+      await visaAPI.uploadDocuments(appId, data);
+    }
+    setDocsUploaded(true);
+  };
 
-  return (
-    <div className="min-h-screen bg-surface-lowest relative font-sans">
-      {/* Abstract Background Elements */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-[-10%] right-[-5%] w-[40vw] h-[40vw] rounded-full bg-primary/5 blur-[100px]" />
-        <div className="absolute bottom-[-10%] left-[-5%] w-[30vw] h-[30vw] rounded-full bg-secondary/5 blur-[100px]" />
-      </div>
+  const handleNext = async () => {
+    if (isSubmittingRef.current || loading) return;
+    const err = validate();
+    if (err) {
+      setStepError(err);
+      return;
+    }
+    try {
+      isSubmittingRef.current = true;
+      if (step.key === 'details' || applicationId) {
+        setBusy('Saving...');
+        const appId = await saveApplication();
+        if (step.key === 'documents' && !docsUploaded) await uploadDocuments(appId);
+      }
+    } catch (e) {
+      const is413 = e?.status === 413 || String(e?.message || e).includes('413');
+      setStepError(is413 ? 'A document is too large. Please upload a file under 5MB.' : (e?.message || 'Something went wrong. Please try again.'));
+      return;
+    } finally {
+      isSubmittingRef.current = false;
+      setBusy('');
+    }
+    setMaxReached(m => Math.max(m, idx + 1));
+    goTo(idx + 1);
+  };
 
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-12 flex flex-col lg:flex-row gap-12 relative z-10">
-        {/* Modern Sidebar */}
-        <div className="w-full lg:w-[340px] flex-shrink-0">
-          <div className="sticky top-24 bg-white/60 backdrop-blur-2xl border border-white p-8 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-            <h1 className="font-headline text-2xl font-extrabold mb-8 text-on-surface tracking-tight">Application Progress</h1>
-            
-            <div className="relative">
-              {/* Vertical tracking line */}
-              <div className="absolute left-[19px] top-4 bottom-4 w-[2px] bg-outline-variant/20 -z-10 rounded-full" />
-              
-              <div className="space-y-8">
-                {steps.map((step, idx) => {
-                  const isCompleted = currentStage > step.num;
-                  const isActive = currentStage === step.num;
-                  
-                  return (
-                    <div key={step.num} className="flex gap-5 relative group">
-                      {/* Step Indicator */}
-                      <div className="relative flex-shrink-0">
-                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-sm font-bold shadow-sm transition-all duration-500 ease-out z-10 relative
-                          ${isCompleted ? 'bg-primary text-white shadow-primary/20' : 
-                            isActive ? 'bg-surface-lowest text-primary border-2 border-primary shadow-lg shadow-primary/10 scale-110' : 
-                            'bg-surface-container-lowest text-on-surface-variant border border-outline-variant/30'}`}
-                        >
-                          {isCompleted ? <span className="material-symbols-outlined text-lg">check</span> : step.num}
-                        </div>
-                        {/* Active Glow */}
-                        {isActive && (
-                          <div className="absolute inset-0 bg-primary/20 rounded-2xl blur-md scale-150 animate-pulse -z-10" />
-                        )}
-                      </div>
-                      
-                      {/* Step Content */}
-                      <div className={`pt-2 transition-all duration-300 ${isActive ? 'translate-x-1' : ''}`}>
-                        <h3 className={`font-headline font-bold text-[15px] transition-colors duration-300 ${isActive ? 'text-on-surface' : isCompleted ? 'text-on-surface-variant' : 'text-on-surface-variant/60'}`}>
-                          {step.title}
-                        </h3>
-                        <p className={`text-xs mt-1 transition-colors duration-300 ${isActive ? 'text-primary font-medium' : isCompleted ? 'text-primary/70' : 'text-outline'}`}>
-                          {step.desc}
-                        </p>
-                      </div>
+  const openRazorpay = (appId, order) => new Promise((resolve, reject) => {
+    if (!window.Razorpay) {
+      reject(new Error('The payment window could not load. Please refresh and try again.'));
+      return;
+    }
+    const rzp = new window.Razorpay({
+      key: order.keyId,
+      amount: order.amount,
+      currency: order.currency,
+      name: 'ZoltanVisa',
+      description: 'Visa Application Service Fee',
+      order_id: order.orderId,
+      handler: async (response) => {
+        try {
+          await visaAPI.verifyPayment({
+            applicationId: appId,
+            razorpay_order_id: response.razorpay_order_id,
+            razorpay_payment_id: response.razorpay_payment_id,
+            razorpay_signature: response.razorpay_signature
+          });
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      },
+      prefill: { name: fullName, email: form.email, contact: `${form.phoneCountryCode}${form.phoneLocal}` },
+      theme: { color: '#ff3366' },
+      modal: { ondismiss: () => reject(new Error('Payment was cancelled. Your application is saved and you can pay any time.')) }
+    });
+    rzp.open();
+  });
+
+  const handlePay = async () => {
+    if (isSubmittingRef.current) return;
+    if (!agreementAccepted) {
+      setStepError('Please accept the Visa Assistance Agreement to continue.');
+      return;
+    }
+    try {
+      isSubmittingRef.current = true;
+      setStepError(null);
+      setBusy('Preparing payment...');
+      const appId = await saveApplication({
+        paymentOption: selectedPay.id,
+        paymentCurrency: currency,
+        paymentAmountGBP: selectedPay.amount,
+        agreement: buildAgreementPayload()
+      });
+      const order = await visaAPI.createPaymentOrder(appId, currency, selectedPay.id);
+      setBusy('Waiting for payment...');
+      await openRazorpay(appId, order);
+      setSubmitted(true);
+    } catch (e) {
+      setStepError(e?.message || 'Payment failed. Please try again.');
+    } finally {
+      isSubmittingRef.current = false;
+      setBusy('');
+    }
+  };
+
+  const changeRoute = (patch) => {
+    setMaxReached(0);
+    setParams(patch);
+  };
+
+  // ---------- step bodies ----------
+  const citizenships = [...new Set(visaOptions.map(o => o.citizenship))];
+  const destinations = visaOptions.filter(o => o.citizenship === citizenship).map(o => o.destination);
+
+  const selectCard = (selected) => `relative text-left rounded-2xl border bg-white/90 backdrop-blur p-5 transition duration-300 ease-out cursor-pointer hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] ${selected ? 'border-primary ring-2 ring-primary/20 shadow-md' : 'border-outline-variant/30'}`;
+  const radioDot = (selected) => (
+    <span className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${selected ? 'border-primary' : 'border-outline-variant/60'}`}>
+      {selected && <span className="apply-pop w-2.5 h-2.5 rounded-full bg-primary" />}
+    </span>
+  );
+
+  const renderStep = () => {
+    switch (step.key) {
+      case 'destination':
+        return (
+          <div className="grid sm:grid-cols-2 gap-5 max-w-2xl mx-auto">
+            <label className="block">
+              <span className="block text-sm font-bold text-on-surface mb-2">Your passport / residence</span>
+              <select
+                className={inputClass}
+                value={citizenship}
+                onChange={e => {
+                  const c = e.target.value;
+                  const dests = visaOptions.filter(o => o.citizenship === c).map(o => o.destination);
+                  changeRoute({ citizenship: c, destination: dests.includes(destination) ? destination : (dests[0] || destination) });
+                }}
+              >
+                {(citizenships.includes(citizenship) ? citizenships : [citizenship, ...citizenships]).map(c => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-sm font-bold text-on-surface mb-2">Destination</span>
+              <select className={inputClass} value={destination} onChange={e => changeRoute({ destination: e.target.value })}>
+                {(destinations.includes(destination) ? destinations : [destination, ...destinations]).map(d => <option key={d}>{d}</option>)}
+              </select>
+            </label>
+          </div>
+        );
+
+      case 'status':
+        return (
+          <div className={`grid gap-4 grid-cols-2 sm:grid-cols-3 ${flow.statuses.length >= 5 ? 'lg:grid-cols-5' : ''}`}>
+            {flow.statuses.map((p, i) => {
+              const selected = p.key === form.applicantStatus;
+              return (
+                <button key={p.key} type="button" onClick={() => update({ applicantStatus: p.key })} className={`${selectCard(selected)} apply-rise group flex flex-col`} style={{ '--i': i + 2 }} aria-pressed={selected}>
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
+                      <span className="material-symbols-outlined">{p.icon || 'person'}</span>
+                    </span>
+                    {radioDot(selected)}
+                  </div>
+                  <h3 className="font-headline font-bold text-lg text-on-surface leading-snug">{p.label}</h3>
+                  {p.description && <p className="text-sm text-on-surface-variant mt-1">{p.description}</p>}
+                </button>
+              );
+            })}
+          </div>
+        );
+
+      case 'purpose':
+        return (
+          <div className={`grid gap-4 sm:grid-cols-2 ${flow.purposes.length >= 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            {flow.purposes.map((p, i) => {
+              const selected = p.key === form.visaCategory;
+              return (
+                <button key={p.key} type="button" onClick={() => update({ visaCategory: p.key })} className={`${selectCard(selected)} apply-rise group`} style={{ '--i': i + 2 }} aria-pressed={selected}>
+                  <div className="flex items-start justify-between mb-4">
+                    <span className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
+                      <span className="material-symbols-outlined">{p.icon || 'flight_takeoff'}</span>
+                    </span>
+                    {radioDot(selected)}
+                  </div>
+                  <h3 className="font-headline font-bold text-xl text-on-surface">{p.label}</h3>
+                  {p.description && <p className="text-sm text-on-surface-variant mt-1">{p.description}</p>}
+                  {p.points?.some(Boolean) && (
+                    <ul className="mt-4 pt-4 border-t border-outline-variant/20 space-y-1.5">
+                      {p.points.filter(Boolean).map(pt => (
+                        <li key={pt} className="flex gap-2 text-sm text-on-surface/80">
+                          <span className="material-symbols-outlined text-[16px] text-primary mt-0.5">check</span>{pt}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        );
+
+      case 'centre':
+        return (
+          <div className="grid sm:grid-cols-2 gap-4 max-w-2xl mx-auto">
+            {flow.centres.map((c, i) => {
+              const selected = c.name === form.centre;
+              return (
+                <button key={c.name} type="button" onClick={() => update({ centre: c.name })} className={`${selectCard(selected)} apply-rise`} style={{ '--i': i + 2 }} aria-pressed={selected}>
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="font-headline font-bold text-xl text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary">location_on</span>{c.name}
+                    </h3>
+                    {radioDot(selected)}
+                  </div>
+                  {c.description && <p className="text-sm text-on-surface-variant mt-2">{c.description}</p>}
+                </button>
+              );
+            })}
+          </div>
+        );
+
+      case 'dates': {
+        const days = daysUntil(form.departureDate);
+        return (
+          <div className="max-w-xl mx-auto space-y-10 text-center">
+            <div>
+              <label htmlFor="departureDate" className="block font-bold text-on-surface mb-3">Departure date</label>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <input id="departureDate" type="date" min={todayISO()} value={form.departureDate} onChange={e => update({ departureDate: e.target.value })} className={`${inputClass} sm:w-72`} />
+                {days !== null && days >= 0 && (
+                  <p className="text-on-surface-variant whitespace-nowrap"><span key={days} className="apply-pop inline-block text-3xl font-bold text-on-surface">{days}</span> days to prepare</p>
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="font-bold text-on-surface">Number of travellers</p>
+              <p className="text-sm text-on-surface-variant mb-4">Everyone who needs a visa for this trip, children included.</p>
+              <div className="inline-flex items-center gap-6 bg-white border border-outline-variant/30 rounded-full px-5 py-2 shadow-sm">
+                <button type="button" aria-label="Fewer travellers" disabled={travellers <= 1} onClick={() => update({ travellers: travellers - 1 })} className="w-9 h-9 rounded-full hover:bg-surface-container disabled:opacity-30 cursor-pointer">−</button>
+                <span key={travellers} className="apply-pop text-2xl font-bold w-6" aria-live="polite">{travellers}</span>
+                <button type="button" aria-label="More travellers" disabled={travellers >= 10} onClick={() => update({ travellers: travellers + 1 })} className="w-9 h-9 rounded-full hover:bg-surface-container disabled:opacity-30 cursor-pointer">+</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      case 'details':
+        return (
+          <div className="grid sm:grid-cols-2 gap-x-5 gap-y-5 max-w-2xl mx-auto">
+            {detailFields.map(f => (
+              <label key={f.id} className={`block ${f.type === 'textarea' ? 'sm:col-span-2' : ''}`}>
+                <span className="block text-sm font-bold text-on-surface mb-2">{f.label}{!f.required && <span className="font-normal text-on-surface-variant"> (optional)</span>}</span>
+                {f.type === 'country' ? (
+                  <select className={inputClass} value={form[f.name]} onChange={e => update({ [f.name]: e.target.value })}>
+                    <option value="">Choose a nationality</option>
+                    {countriesList.map(c => <option key={c}>{c}</option>)}
+                  </select>
+                ) : f.type === 'textarea' ? (
+                  <textarea rows={3} className={`${inputClass} resize-none`} value={form[f.name]} onChange={e => update({ [f.name]: e.target.value })} />
+                ) : f.type === 'phone' ? (
+                  <div className="flex gap-2">
+                    <select aria-label={`${f.label} country code`} className={`${inputClass} w-28 px-2`} value={form[f.code]} onChange={e => update({ [f.code]: e.target.value })}>
+                      {countryCodes.map(c => <option key={c.code} value={c.code}>{c.flag} {c.code}</option>)}
+                    </select>
+                    <input type="tel" autoComplete={f.name === 'phoneLocal' ? 'tel-national' : 'off'} className={inputClass} value={form[f.name]} onChange={e => update({ [f.name]: e.target.value })} />
+                  </div>
+                ) : (
+                  <input
+                    type={f.type || 'text'}
+                    max={f.name === 'dateOfBirth' ? todayISO() : undefined}
+                    min={f.name === 'passportExpiry' ? todayISO() : undefined}
+                    autoComplete={{ name: 'given-name', surname: 'family-name', email: 'email', dateOfBirth: 'bday' }[f.name]}
+                    className={inputClass}
+                    value={form[f.name]}
+                    onChange={e => update({ [f.name]: e.target.value })}
+                  />
+                )}
+                {f.hint && <span className="block text-xs text-on-surface-variant mt-1.5">{f.hint}</span>}
+              </label>
+            ))}
+            <p className="sm:col-span-2 text-center text-xs text-on-surface-variant">Used only for this application and handled securely.</p>
+          </div>
+        );
+
+      case 'documents':
+        return (
+          <div className="max-w-3xl mx-auto bg-white rounded-3xl border border-outline-variant/30 p-6 shadow-sm">
+            <DocumentUpload
+              requiredDocuments={coreDocsConfig}
+              onFilesChange={(files) => {
+                setStepError(null);
+                setCoreDocuments(files);
+                setDocsUploaded(false);
+              }}
+            />
+          </div>
+        );
+
+      case 'support':
+        return (
+          <div>
+            <p className="text-center text-sm text-on-surface-variant -mt-4 mb-6">Prices are per traveller. Government and visa centre fees are separate.</p>
+            <div className={`grid gap-5 ${flow.packages.length >= 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 max-w-3xl mx-auto'}`}>
+              {flow.packages.map((p, i) => {
+                const selected = p.key === form.package;
+                const dark = !!p.highlight;
+                return (
+                  <div key={p.key} style={{ '--i': i + 2 }} className={`apply-rise rounded-3xl p-6 flex flex-col border transition duration-300 ease-out hover:-translate-y-1.5 hover:shadow-2xl ${dark ? 'bg-on-surface text-white border-on-surface shadow-xl' : 'bg-white border-outline-variant/30'} ${selected ? 'ring-4 ring-primary/40' : ''}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold tracking-[0.15em] uppercase text-primary">{p.tag}</span>
+                      {p.badge && <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full ${dark ? 'bg-white/10' : 'bg-primary/10 text-primary'}`}>{p.badge}</span>}
                     </div>
+                    <h3 className="font-headline font-bold text-xl mt-3">{p.title}</h3>
+                    <p className={`mt-4 pb-4 border-b ${dark ? 'border-white/10' : 'border-outline-variant/20'}`}>
+                      <span className="text-4xl font-extrabold">£{parseFloat(p.price) || 0}</span>
+                      <span className={`text-sm ml-1.5 ${dark ? 'text-white/60' : 'text-on-surface-variant'}`}>per traveller</span>
+                    </p>
+                    {parseFloat(p.pay_now_amount) > 0 && parseFloat(p.pay_now_amount) < parseFloat(p.price) && (
+                      <p className={`mt-4 text-sm font-semibold rounded-xl px-3 py-2 ${dark ? 'bg-white/10 text-primary-fixed' : 'bg-primary/5 text-primary'}`}>
+                        Start with just £{parseFloat(p.pay_now_amount)} today, pay the rest later
+                      </p>
+                    )}
+                    <ul className="mt-4 space-y-2.5 flex-1">
+                      {(p.points || []).filter(Boolean).map(pt => (
+                        <li key={pt} className="flex gap-2 text-sm">
+                          <span className="material-symbols-outlined text-[18px] text-primary">check_circle</span>{pt}
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      onClick={() => update({ package: p.key })}
+                      aria-pressed={selected}
+                      className={`mt-6 w-full flex items-center justify-between font-bold rounded-full px-5 py-3 transition cursor-pointer ${dark ? 'bg-white text-on-surface hover:bg-white/90' : 'bg-primary/5 text-primary hover:bg-primary/10'}`}
+                    >
+                      {selected ? 'Selected' : `Choose ${p.tag ? p.tag.charAt(0) + p.tag.slice(1).toLowerCase() : p.title}`}
+                      <span className="material-symbols-outlined text-lg">{selected ? 'check' : 'arrow_forward'}</span>
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+
+      case 'pay': {
+        const at = (key) => steps.findIndex(s => s.key === key);
+        const rows = [
+          { label: 'Trip', value: [destination, status?.label, purpose?.label, form.centre && `${form.centre} centre`].filter(Boolean).join(', '), step: [at('status'), at('purpose'), at('destination')].find(n => n >= 0) ?? -1 },
+          { label: 'Travel', value: form.departureDate ? `Departs ${formatDate(form.departureDate)}, ${travellers} traveller${travellers > 1 ? 's' : ''}` : `${travellers} traveller${travellers > 1 ? 's' : ''}`, step: at('dates') },
+          { label: 'Applicant', value: [fullName, form.email].filter(Boolean).join(', '), step: at('details') },
+          pkg && { label: 'Support', value: pkg.title, step: at('support') }
+        ].filter(Boolean);
+
+        if (submitted) {
+          return (
+            <div className="max-w-lg mx-auto text-center space-y-4 py-10">
+              <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto">
+                <span className="material-symbols-outlined text-green-600 text-5xl">check_circle</span>
+              </div>
+              <h3 className="text-3xl font-headline font-bold text-on-surface">Application submitted</h3>
+              <p className="text-on-surface-variant">Your payment went through. Our team will review your application within 24 hours and contact you at {form.email}.</p>
+            </div>
+          );
+        }
+
+        return (
+          <div className="max-w-2xl mx-auto space-y-8">
+            <div className="bg-white rounded-2xl border border-outline-variant/30 divide-y divide-outline-variant/20">
+              {rows.map(r => (
+                <div key={r.label} className="flex items-start gap-4 px-5 py-4 text-sm">
+                  <span className="w-20 shrink-0 text-on-surface-variant">{r.label}</span>
+                  <span className="flex-1 text-on-surface font-medium break-words">{r.value || '—'}</span>
+                  {r.step >= 0 && <button type="button" onClick={() => goTo(r.step)} className="text-primary font-semibold underline underline-offset-2 cursor-pointer">Change</button>}
+                </div>
+              ))}
+            </div>
+
+            <div>
+              <h3 className="text-center font-bold text-on-surface">How would you like to pay?</h3>
+              <p className="text-center text-sm text-on-surface-variant mb-4">Same service either way. Your consultant starts work as soon as the first payment goes through.</p>
+              <div className="space-y-3">
+                {payOptions.map((o, i) => {
+                  const selected = o.id === selectedPay.id;
+                  return (
+                    <button key={o.id} type="button" onClick={() => setPaymentOption(o.id)} aria-pressed={selected} style={{ '--i': i + 2 }} className={`w-full ${selectCard(selected)} apply-rise hover:translate-y-0 flex gap-3`}>
+                      {radioDot(selected)}
+                      <span className="flex-1">
+                        <span className="flex items-center gap-2 font-bold text-on-surface">
+                          {o.title}
+                          {o.badge && payOptions.length > 1 && <span className="text-[10px] uppercase tracking-wider bg-primary/10 text-primary px-2 py-0.5 rounded-full">{o.badge}</span>}
+                        </span>
+                        {o.lines.map(l => <span key={l} className="block text-sm text-on-surface-variant mt-1">{l}</span>)}
+                      </span>
+                      <span className="font-bold text-on-surface">{money(o.amount, curr)}</span>
+                    </button>
                   );
                 })}
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Main Content Area */}
-        <div className="flex-1 w-full max-w-4xl mt-12">
-          {renderStageContent()}
-        </div>
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="font-bold text-on-surface">What you pay today</h3>
+                <select aria-label="Currency" value={currency} onChange={e => setCurrency(e.target.value)} className="bg-white border border-outline-variant/40 rounded-lg px-2 py-1 text-sm">
+                  {Object.keys(CURRENCIES).map(c => <option key={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="bg-white rounded-2xl border border-outline-variant/30 divide-y divide-outline-variant/20 text-sm">
+                <div className="flex justify-between px-5 py-3"><span>{pkg?.title || 'Service fee'}{travellers > 1 && ` × ${travellers}`}</span><span>{money(selectedPay.amount + selectedPay.balance, curr)}</span></div>
+                <div className="flex justify-between px-5 py-3 gap-4"><span>Government and visa centre fees</span><span className="text-right">Paid separately at the appointment</span></div>
+                {selectedPay.balance > 0 && <div className="flex justify-between px-5 py-3"><span>Balance, after your appointment is booked</span><span>{money(selectedPay.balance, curr)}</span></div>}
+                <div className="flex justify-between px-5 py-4 text-lg font-bold"><span>Due today</span><span key={selectedPay.amount + currency} className="apply-pop">{money(selectedPay.amount, curr)}</span></div>
+              </div>
+            </div>
+
+            <label className={`flex items-start gap-3 p-4 rounded-2xl border cursor-pointer ${agreementAccepted ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/30 bg-white'}`}>
+              <input type="checkbox" checked={agreementAccepted} onChange={e => { setAgreementAccepted(e.target.checked); setStepError(null); }} className="mt-1 w-5 h-5 accent-primary shrink-0" />
+              <span className="text-sm text-on-surface">
+                I have read and accept the{' '}
+                <button type="button" onClick={(e) => { e.preventDefault(); setAgreementModalOpen(true); }} className="text-primary font-semibold underline underline-offset-2 cursor-pointer">Visa Assistance Agreement</button>
+                {' '}and confirm my documents and details are genuine. Visa decisions rest with the authorities.
+              </span>
+            </label>
+          </div>
+        );
+      }
+
+      default:
+        return null;
+    }
+  };
+
+  // ---------- layout ----------
+  const prev = steps[idx - 1];
+  const next = steps[idx + 1];
+  const isPay = step.key === 'pay';
+
+  return (
+    <div className="min-h-screen">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-5">
+
+        {/* Stepper */}
+        <nav aria-label="Application steps" className="apply-rise max-w-4xl mx-auto" style={{ '--i': 1 }}>
+          <ol className="flex gap-5 overflow-x-auto pb-3 sm:justify-center">
+            {steps.map((s, i) => {
+              const done = i < idx;
+              const active = i === idx;
+              const reachable = i <= reach && !submitted;
+              return (
+                <li key={s.key} className="shrink-0">
+                  <button
+                    type="button"
+                    disabled={!reachable || active}
+                    onClick={() => goTo(i)}
+                    aria-current={active ? 'step' : undefined}
+                    className="group flex items-center gap-2 text-sm disabled:cursor-default cursor-pointer"
+                  >
+                    <span className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center transition-all duration-300 ${active ? 'bg-primary text-white scale-110 shadow-md shadow-primary/30' : done ? 'bg-primary/10 text-primary' : 'border border-outline-variant/60 text-on-surface-variant'}`}>
+                      {done ? <span className="apply-pop material-symbols-outlined text-sm">check</span> : i + 1}
+                    </span>
+                    <span className={`transition-colors duration-300 ${active ? 'font-bold text-on-surface' : done ? 'text-on-surface group-hover:text-primary' : 'text-on-surface-variant'}`}>{s.label}</span>
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          <div className="h-0.5 bg-outline-variant/20 rounded-full">
+            <div className="h-full bg-gradient-to-r from-primary/70 to-primary rounded-full transition-all duration-700 ease-out" style={{ width: `${(idx / Math.max(steps.length - 1, 1)) * 100}%` }} />
+          </div>
+        </nav>
+
+        {/* Step */}
+        <section key={step.key} className="mt-6 sm:mt-8">
+          <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8">
+            <h1 className="apply-rise font-headline text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-on-surface">{step.heading}</h1>
+            <p className="apply-rise mt-2 text-on-surface-variant sm:text-lg" style={{ '--i': 1 }}>{step.subtitle}</p>
+          </div>
+
+          <div className="apply-rise" style={{ '--i': 2 }}>{renderStep()}</div>
+
+          {stepError && (
+            <p key={stepError} role="alert" className="apply-shake max-w-2xl mx-auto mt-6 p-3 rounded-xl bg-error/10 text-error text-sm font-semibold text-center">{stepError}</p>
+          )}
+
+          {!submitted && (
+            <div className="apply-rise sticky bottom-0 z-30 mt-8 -mx-4 sm:mx-auto max-w-4xl pl-4 pr-24 py-3 sm:rounded-t-2xl bg-white/80 backdrop-blur-md border-t border-outline-variant/20 flex items-center justify-between gap-4">
+              {prev ? (
+                <button type="button" onClick={() => goTo(idx - 1)} disabled={!!busy} aria-label={`Back to ${prev.label}`} className="group flex items-center gap-1.5 text-on-surface-variant font-semibold hover:text-on-surface disabled:opacity-50 cursor-pointer transition-colors">
+                  <span className="material-symbols-outlined text-lg transition-transform group-hover:-translate-x-1">arrow_back</span>
+                  <span className="hidden sm:inline">{prev.label}</span>
+                </button>
+              ) : <span />}
+              <button
+                type="button"
+                onClick={isPay ? handlePay : handleNext}
+                disabled={!!busy || loading}
+                className="group flex items-center gap-3 bg-on-surface text-white font-bold pl-6 pr-2 py-2 rounded-full shadow-lg hover:-translate-y-0.5 hover:shadow-xl active:scale-[0.98] transition duration-300 disabled:opacity-60 disabled:hover:translate-y-0 cursor-pointer"
+              >
+                <span className="whitespace-nowrap">
+                  {busy || (loading ? 'Loading...' : isPay ? `Pay ${money(selectedPay.amount, curr)} now` : <>Continue<span className="hidden sm:inline"> to {next.label.toLowerCase()}</span></>)}
+                </span>
+                <span className="w-9 h-9 rounded-full bg-white/15 flex items-center justify-center transition-transform duration-300 group-hover:translate-x-0.5 group-hover:bg-primary">
+                  {busy ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <span className="material-symbols-outlined text-lg">{isPay ? 'lock' : 'arrow_forward'}</span>}
+                </span>
+              </button>
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Fullscreen Agreement Reader Modal */}
       <TravelVisaAgreementModal
         isOpen={agreementModalOpen}
         onClose={() => setAgreementModalOpen(false)}
-        clientDetails={formData}
+        clientDetails={{ ...form, fullName }}
         onAccept={() => {
           setAgreementAccepted(true);
-          setAgreementError(null);
+          setStepError(null);
         }}
         isAccepted={agreementAccepted}
       />

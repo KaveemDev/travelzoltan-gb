@@ -314,3 +314,23 @@ body {
 .btn-hover-lift:active {
   transform: translateY(0);
 }
+/* Site background + /apply wizard motion */
+@keyframes apply-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes apply-drift { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(var(--dx, 40px), var(--dy, 30px)) scale(1.08); } }
+@keyframes apply-dash { to { stroke-dashoffset: -400; } }
+@keyframes apply-twinkle { 0%, 100% { opacity: 0.15; transform: scale(0.8); } 50% { opacity: 0.7; transform: scale(1); } }
+@keyframes apply-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: scale(1); } }
+@keyframes apply-shake { 0%, 100% { transform: none; } 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes apply-float { 0%, 100% { transform: translateY(0) rotate(var(--r, 0deg)); } 50% { transform: translateY(-10px) rotate(var(--r, 0deg)); } }
+
+.apply-rise { animation: apply-rise 0.55s cubic-bezier(0.22, 1, 0.36, 1) backwards; animation-delay: calc(var(--i, 0) * 70ms); }
+.apply-blob { animation: apply-drift 22s ease-in-out infinite; }
+.apply-dash { animation: apply-dash 40s linear infinite; }
+.apply-twinkle { animation: apply-twinkle 5s ease-in-out infinite; }
+.apply-pop { animation: apply-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; }
+.apply-shake { animation: apply-shake 0.3s ease-in-out; }
+.apply-float { animation: apply-float 7s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .apply-rise, .apply-blob, .apply-dash, .apply-twinkle, .apply-pop, .apply-shake, .apply-float { animation: none !important; }
+}

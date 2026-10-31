@@ -485,7 +485,7 @@ const ChecklistPage = () => {
   const progressPercent = displayDocs.length > 0 ? Math.round((checkedCount / displayDocs.length) * 100) : 0;
 
   return (
-    <main className="pt-24 min-h-screen bg-slate-50/60 pb-16">
+    <main className="pt-24 min-h-screen pb-16">
       {/* Route Switcher Modal */}
       {isEditingRoute && (
         <div className="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 animate-dialog-appear">

@@ -208,7 +208,8 @@ const getFlatDocsArray = (docs) => {
 
 const normalizeFormSchema = (form_schema) => {
   const fields = form_schema?.personal_details_fields || {};
-  const result = { personal_details_fields: {} };
+  // keep other schema keys (apply_flow etc.) intact
+  const result = { ...(form_schema || {}), personal_details_fields: {} };
   DEFAULT_PERSONAL_DETAILS_FIELDS.forEach(f => {
     const existing = fields[f.id];
     result.personal_details_fields[f.id] = {

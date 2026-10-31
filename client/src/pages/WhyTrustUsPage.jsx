@@ -124,7 +124,7 @@ const WhyTrustUsPage = () => {
   };
 
   return (
-    <main className="pt-24 min-h-screen bg-slate-50/50">
+    <main className="pt-24 min-h-screen">
       {/* Hero Section */}
       <section className="relative py-20 px-6 md:px-12 bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white overflow-hidden">
         {/* Subtle Ambient Backdrops */}

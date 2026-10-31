@@ -668,6 +668,25 @@ const createPaymentOrder = async (req, res) => {
       }
     }
 
+    // Support packages from the admin-configured apply flow override the route fee; prices are per traveller
+    let schema = config?.form_schema;
+    if (typeof schema === 'string') {
+      try { schema = JSON.parse(schema); } catch (e) { schema = null; }
+    }
+    const userData = application.user_data || {};
+    const pkg = (schema?.apply_flow?.packages || []).find(p => p.key && p.key === userData.package);
+    if (pkg) {
+      const price = parseFloat(pkg.price) || 0;
+      const now = parseFloat(pkg.pay_now_amount) || 0;
+      amountGBP = paymentOption === 'partial' && now > 0 && now < price ? now : price;
+    }
+    const travellers = Math.min(Math.max(parseInt(userData.travellers, 10) || 1, 1), 10);
+    amountGBP *= travellers;
+
+    if (!(amountGBP > 0)) {
+      return res.status(400).json({ message: 'No payable amount is configured for this application.' });
+    }
+
     const rate = EXCHANGE_RATES[currency.toUpperCase()] || 1.0;
     const amountConverted = amountGBP * rate;
     const amountSmallestUnit = Math.round(amountConverted * 100);
