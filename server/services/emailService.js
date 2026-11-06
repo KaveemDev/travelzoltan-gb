@@ -67,7 +67,8 @@ const getAdminEmail = () => {
 
 // Dispatch via ZeptoMail HTTPS REST API (Port 443 - never blocked by cloud firewalls or VPS outbound restrictions)
 const sendViaZeptoRestApi = async ({ to, subject, html, replyTo, bcc, text }) => {
-  const apiKey = process.env.SMTP_PASS;
+  // ZeptoMail shows the token with a "Zoho-enczapikey " prefix; strip it so the header isn't doubled
+  const apiKey = (process.env.SMTP_PASS || '').replace(/^Zoho-enczapikey\s+/i, '').trim();
   if (!apiKey || apiKey === 'your_zeptomail_api_key_here') {
     throw new Error('ZeptoMail API key / SMTP_PASS is not configured');
   }
@@ -183,6 +184,7 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
 
     // 1. Try ZeptoMail HTTPS REST API first (Port 443 - immune to DigitalOcean/VPS SMTP port blocking)
     const isZepto = (process.env.SMTP_HOST || '').includes('zeptomail') || !process.env.SMTP_HOST;
+    let apiError = null;
     if (isZepto) {
       try {
         console.log(`[emailService] Sending email to: ${to}, subject: "${subject}" via ZeptoMail HTTPS API...`);
@@ -190,6 +192,7 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
         console.log(`[emailService] Email sent successfully via ZeptoMail HTTPS API! Request ID: ${result.messageId}`);
         return result;
       } catch (apiErr) {
+        apiError = apiErr.message;
         console.warn(`[emailService] ZeptoMail HTTPS API failed (${apiErr.message}). Falling back to SMTP...`);
       }
     }
@@ -220,6 +223,8 @@ const sendEmail = async ({ to, subject, html, replyTo, bcc, text }) => {
         console.log(`[emailService] Fallback email sent successfully! Message ID: ${retryInfo.messageId}`);
         return { success: true, messageId: retryInfo.messageId, fallbackUsed: true };
       }
+      // Surface the HTTPS API failure too; otherwise only the SMTP fallback's error reaches the admin
+      if (apiError) sendErr.message = `${apiError} | SMTP fallback: ${sendErr.message}`;
       throw sendErr;
     }
   } catch (error) {
