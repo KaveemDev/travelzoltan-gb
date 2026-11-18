@@ -150,7 +150,15 @@ export const visaAPI = {
       });
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      const data = error.response?.data;
+      if (data?.message) throw data;
+      // nginx 413s carry no CORS headers, so the browser reports them as a bare network error
+      throw {
+        status: error.response?.status,
+        message: error.response
+          ? `Upload failed (error ${error.response.status}). Please try again.`
+          : 'Upload failed. Please check your connection, or try a smaller file.',
+      };
     }
   },
 

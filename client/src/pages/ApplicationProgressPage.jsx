@@ -367,7 +367,7 @@ const ApplicationProgressPage = () => {
       }
     } catch (e) {
       const is413 = e?.status === 413 || String(e?.message || e).includes('413');
-      setStepError(is413 ? 'A document is too large. Please upload a file under 5MB.' : (e?.message || 'Something went wrong. Please try again.'));
+      setStepError(is413 ? 'A document is too large. Please upload a file under 5MB.' : ((typeof e === 'string' ? e : e?.message) || 'Something went wrong. Please try again.'));
       return;
     } finally {
       isSubmittingRef.current = false;
